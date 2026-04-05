@@ -6,6 +6,7 @@ import { env } from './src/config/env.js'
 import errorHandler from './src/middleware/errorHandler.js'
 import { NotFoundError } from './src/shared/errors.js'
 import authRoutes from './src/modules/auth/auth.routes.js'
+import sosRoutes from './src/modules/sos/sos.routes.js'     // ← add
 
 const app = express()
 
@@ -20,8 +21,8 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
-// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
+app.use('/api/sos',  sosRoutes)                             // ← add
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }))
 
