@@ -8,6 +8,7 @@ import { NotFoundError } from './src/shared/errors.js'
 import authRoutes from './src/modules/auth/auth.routes.js'
 import sosRoutes from './src/modules/sos/sos.routes.js'   
 import branchRoutes from './src/modules/branch/branch.routes.js'
+import userRoutes   from './src/modules/user/user.routes.js'  
 
 const app = express()
 
@@ -24,7 +25,8 @@ app.use(cookieParser())
 
 app.use('/api/auth', authRoutes)
 app.use('/api/sos',  sosRoutes)   
-app.use('/api/branch', branchRoutes)                          // ← add
+app.use('/api/branch', branchRoutes)                          
+app.use('/api/user',   userRoutes)    
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }))
 
