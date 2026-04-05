@@ -19,7 +19,7 @@ const createLimiter = ({ windowMs, max, message, keyPrefix }) => {
 
   if (isRedisReady()) {
     options.store = new RedisStore({
-      sendCommand: (...args) => redisClient.sendCommand(args),
+      sendCommand: (...args) => redisClient.sendCommand(...args),
       prefix: `rl:${keyPrefix}:`,
     })
   }

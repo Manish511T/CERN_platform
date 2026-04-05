@@ -90,10 +90,9 @@ userSchema.index({ location: '2dsphere' })
 userSchema.index({ role: 1, isOnDuty: 1, branchId: 1 })
 
 // Hash password before saving — only runs if password field was modified
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next()
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return
   this.password = await bcrypt.hash(this.password, 12)
-  next()
 })
 
 // Instance method: compare plain password against stored hash

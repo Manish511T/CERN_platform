@@ -2,6 +2,9 @@ import { env } from '../config/env.js'
 import logger from '../config/logger.js'
 
 const errorHandler = (err, req, res, next) => {
+  // Always log the full error with stack trace
+  logger.error(`${err.message}\n${err.stack}`)
+
   // Known operational errors
   if (err.isOperational) {
     return res.status(err.statusCode).json({
@@ -34,9 +37,6 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({ success: false, error: 'Token expired', code: 'TOKEN_EXPIRED' })
   }
-
-  // Unknown — log and hide details in production
-  logger.error({ err, method: req.method, url: req.url })
 
   return res.status(500).json({
     success: false,

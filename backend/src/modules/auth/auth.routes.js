@@ -20,8 +20,9 @@ router.post('/login',    rateLimiter.auth, validate(loginSchema),    authControl
 router.post('/refresh',                                               authController.refresh)
 router.post('/logout',   protect,                                     authController.logout)
 
+
 // ── Protected routes ──────────────────────────────────────────────────────────
-router.get('/me', protect, authController.getMe)
+router.get('/me',       protect,                                      authController.getMe)
 
 router.patch(
   '/duty',

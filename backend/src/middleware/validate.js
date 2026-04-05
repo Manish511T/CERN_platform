@@ -14,9 +14,14 @@ const validate = (schema) => (req, res, next) => {
     throw new ValidationError(messages)
   }
 
-  req.body   = result.data.body   ?? req.body
-  req.params = result.data.params ?? req.params
-  req.query  = result.data.query  ?? req.query
+  // Only reassign body and params — never reassign req.query directly
+  if (result.data.body)   req.body   = result.data.body
+  if (result.data.params) req.params = result.data.params
+
+  // Merge parsed query values into existing req.query instead of replacing it
+  if (result.data.query) {
+    Object.assign(req.query, result.data.query)
+  }
 
   next()
 }

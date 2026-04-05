@@ -10,24 +10,51 @@ import logger from '../../config/logger.js'
 
 // ─── REGISTER ────────────────────────────────────────────────────────────────
 
+// export const register = async ({ name, email, password, role, phone }) => {
+//   // Check duplicate email before attempting to create
+//   const existing = await User.findOne({ email })
+//   if (existing) throw new ConflictError('Email is already registered')
+
+//   const user = await User.create({ name, email, password, role, phone })
+
+//   const { accessToken, refreshToken } = generateTokenPair(user._id)
+
+//   // Store hashed refresh token on user for rotation validation
+//   user.refreshToken = refreshToken
+//   await user.save({ validateBeforeSave: false })
+
+//   logger.info({ event: 'user_registered', userId: user._id, role: user.role })
+
+//   return { user: user.toSafeObject(), accessToken, refreshToken }
+// }
+
 export const register = async ({ name, email, password, role, phone }) => {
-  // Check duplicate email before attempting to create
-  const existing = await User.findOne({ email })
-  if (existing) throw new ConflictError('Email is already registered')
+  try {
+    console.log('1. register service called', { name, email, role })
 
-  const user = await User.create({ name, email, password, role, phone })
+    const existing = await User.findOne({ email })
+    console.log('2. checked existing user', existing?._id)
 
-  const { accessToken, refreshToken } = generateTokenPair(user._id)
+    if (existing) throw new ConflictError('Email is already registered')
 
-  // Store hashed refresh token on user for rotation validation
-  user.refreshToken = refreshToken
-  await user.save({ validateBeforeSave: false })
+    const user = await User.create({ name, email, password, role, phone })
+    console.log('3. user created', user._id)
 
-  logger.info({ event: 'user_registered', userId: user._id, role: user.role })
+    const { accessToken, refreshToken } = generateTokenPair(user._id)
+    console.log('4. tokens generated')
 
-  return { user: user.toSafeObject(), accessToken, refreshToken }
+    user.refreshToken = refreshToken
+    await user.save({ validateBeforeSave: false })
+    console.log('5. refresh token saved')
+
+    logger.info({ event: 'user_registered', userId: user._id, role: user.role })
+
+    return { user: user.toSafeObject(), accessToken, refreshToken }
+  } catch (err) {
+    console.error('REGISTER ERROR:', err.message, err.stack)
+    throw err
+  }
 }
-
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
 
 export const login = async ({ email, password }) => {
