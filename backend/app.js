@@ -6,7 +6,8 @@ import { env } from './src/config/env.js'
 import errorHandler from './src/middleware/errorHandler.js'
 import { NotFoundError } from './src/shared/errors.js'
 import authRoutes from './src/modules/auth/auth.routes.js'
-import sosRoutes from './src/modules/sos/sos.routes.js'     // ← add
+import sosRoutes from './src/modules/sos/sos.routes.js'   
+import branchRoutes from './src/modules/branch/branch.routes.js'
 
 const app = express()
 
@@ -22,7 +23,8 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
 app.use('/api/auth', authRoutes)
-app.use('/api/sos',  sosRoutes)                             // ← add
+app.use('/api/sos',  sosRoutes)   
+app.use('/api/branch', branchRoutes)                          // ← add
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }))
 
