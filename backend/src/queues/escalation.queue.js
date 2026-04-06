@@ -86,7 +86,7 @@ export const scheduleEscalation = async (sosId, delaySeconds) => {
     { sosId },
     {
       delay:  delaySeconds * 1000,
-      jobId:  `escalation:${sosId}`,
+      jobId:  `escalation-${sosId}`,
     }
   )
   logger.info({ event: 'escalation_scheduled', sosId, delaySeconds })
@@ -94,7 +94,7 @@ export const scheduleEscalation = async (sosId, delaySeconds) => {
 
 export const cancelEscalation = async (sosId) => {
   if (!queue) return
-  const job = await queue.getJob(`escalation:${sosId}`)
+  const job = await queue.getJob(`escalation-${sosId}`)
   if (job) {
     await job.remove()
     logger.info({ event: 'escalation_cancelled', sosId })

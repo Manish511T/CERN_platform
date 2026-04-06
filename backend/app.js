@@ -9,6 +9,7 @@ import authRoutes from './src/modules/auth/auth.routes.js'
 import sosRoutes from './src/modules/sos/sos.routes.js'   
 import branchRoutes from './src/modules/branch/branch.routes.js'
 import userRoutes   from './src/modules/user/user.routes.js'  
+import notificationRoutes from './src/modules/notification/notification.routes.js'
 
 const app = express()
 
@@ -27,6 +28,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/sos',  sosRoutes)   
 app.use('/api/branch', branchRoutes)                          
 app.use('/api/user',   userRoutes)    
+app.use('/api/notification', notificationRoutes)  
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }))
 

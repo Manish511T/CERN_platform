@@ -14,55 +14,54 @@ import {
 
 const router = Router()
 
-// All branch routes require authentication
 router.use(protect)
 
-// ── Super Admin only ──────────────────────────────────────────────────────────
-router.post(
-  '/',
+// ── Collection routes (no param) ──────────────────────────────────────────────
+router.get('/',
+  branchController.getAllBranches
+)
+
+router.post('/',
   authorize(ROLES.SUPER_ADMIN),
   validate(createBranchSchema),
   branchController.createBranch
 )
 
-router.delete(
-  '/:branchId',
-  authorize(ROLES.SUPER_ADMIN),
-  validate(branchParamSchema),
-  branchController.deleteBranch
-)
-
-router.post(
-  '/:branchId/assign-admin',
+// ── Sub-resource routes (specific paths before /:branchId) ────────────────────
+router.post('/:branchId/assign-admin',
   authorize(ROLES.SUPER_ADMIN),
   validate(assignAdminSchema),
   branchController.assignAdmin
 )
 
-// ── Super Admin + Branch Admin ────────────────────────────────────────────────
-router.patch(
-  '/:branchId',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
-  validate(updateBranchSchema),
-  branchController.updateBranch
-)
-
-router.post(
-  '/:branchId/volunteers',
+router.post('/:branchId/volunteers',
   authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
   validate(assignVolunteerSchema),
   branchController.manageVolunteer
 )
 
-router.get(
-  '/:branchId/volunteers',
+router.get('/:branchId/volunteers',
   authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
   validate(branchParamSchema),
   branchController.getBranchVolunteers
 )
 
-// ── All authenticated users ───────────────────────────────────────────────────
-router.get('/',          branchController.getAllBranches)
-router.get('/:branchId', validate(branchParamSchema), branchController.getBranchById)
+// ── Single resource routes (/:branchId last) ──────────────────────────────────
+router.get('/:branchId',
+  validate(branchParamSchema),
+  branchController.getBranchById
+)
+
+router.patch('/:branchId',
+  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+  validate(updateBranchSchema),
+  branchController.updateBranch
+)
+
+router.delete('/:branchId',
+  authorize(ROLES.SUPER_ADMIN),
+  validate(branchParamSchema),
+  branchController.deleteBranch
+)
 
 export default router
