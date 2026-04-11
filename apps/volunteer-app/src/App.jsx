@@ -1,120 +1,75 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, lazy, Suspense } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useDispatch } from 'react-redux'
+import { setCredentials, setLoading } from './store/slices/authSlice'
+import { setDutyStatus } from './store/slices/dutySlice'
+import api from './services/api'
+import ProtectedRoute from './router/ProtectedRoute'
+import PublicRoute    from './router/PublicRoute'
+import AlertListener  from './features/alerts/components/AlertListener'
 
-function App() {
-  const [count, setCount] = useState(0)
+const LoginPage    = lazy(() => import('./features/auth/pages/LoginPage'))
+const RegisterPage = lazy(() => import('./features/auth/pages/RegisterPage'))
+const Dashboard    = lazy(() => import('./features/dashboard/pages/DashboardPage'))
+const AlertPage    = lazy(() => import('./features/alerts/pages/AlertPage'))
+const TrackingPage = lazy(() => import('./features/tracking/pages/TrackingPage'))
+const HistoryPage  = lazy(() => import('./features/history/pages/HistoryPage'))
+const ProfilePage  = lazy(() => import('./features/profile/pages/ProfilePage'))
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="w-8 h-8 border-4 border-green-500 border-t-transparent
+                    rounded-full animate-spin" />
+  </div>
+)
+
+const App = () => {
+  const dispatch = useDispatch()
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const { data: refreshData } = await api.post('/auth/refresh')
+        const token = refreshData.data.accessToken
+
+        const { data: meData } = await api.get('/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        const user = meData.data.user
+        dispatch(setCredentials({ user, accessToken: token }))
+        dispatch(setDutyStatus(user.isOnDuty || false))
+      } catch {
+        dispatch(setLoading(false))
+      }
+    }
+
+    restoreSession()
+  }, [dispatch])
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <Suspense fallback={<PageLoader />}>
+      {/* Global SOS alert listener — always mounted when logged in */}
+      <AlertListener />
 
-      <div className="ticks"></div>
+      <Routes>
+        <Route element={<PublicRoute redirectTo="/dashboard" />}>
+          <Route path="/login"    element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/alert"     element={<AlertPage />} />
+          <Route path="/tracking"  element={<TrackingPage />} />
+          <Route path="/history"   element={<HistoryPage />} />
+          <Route path="/profile"   element={<ProfilePage />} />
+        </Route>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <Route path="/"  element={<Navigate to="/dashboard" replace />} />
+        <Route path="*"  element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 
