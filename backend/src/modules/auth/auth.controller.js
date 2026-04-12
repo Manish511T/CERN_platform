@@ -31,9 +31,9 @@ export const login = asyncHandler(async (req, res) => {
     email, password,
   })
 
-  if (![ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN].includes(user.role)) {
-    return res.status(403).json({ message: 'Admins only' })
-  }
+  // if (![ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN].includes(user.role)) {
+  //   return res.status(403).json({ message: 'Admins only' })
+  // }
 
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)

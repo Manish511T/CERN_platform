@@ -18,7 +18,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
-  CLIENT_URL: z.string().url(),
+  CLIENT_URLS: z.string().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176'),
 
   // Optional in development, required in production
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -39,3 +39,5 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data
+
+export const allowedOrigins = env.CLIENT_URLS.split(',').map(o => o.trim())

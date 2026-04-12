@@ -4,15 +4,15 @@ import { pubClient, subClient, isRedisReady } from '../config/redis.js'
 import socketMiddleware from './socket.middleware.js'
 import { registerConnectionHandler } from './handlers/connection.handler.js'
 import { registerTrackingHandler } from './handlers/tracking.handler.js'
-import { env } from '../config/env.js'
 import logger from '../config/logger.js'
+import { allowedOrigins }            from '../config/env.js'
 
 let io = null
 
 export const initSocket = async (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin:      env.CLIENT_URL,
+      origin:      allowedOrigins,
       credentials: true,
     },
     transports:    ['websocket', 'polling'],
