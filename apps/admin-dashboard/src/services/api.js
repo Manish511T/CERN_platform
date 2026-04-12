@@ -29,7 +29,14 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (
+      error.response?.status === 401 &&
+      !original._retry &&
+      store.getState().auth.accessToken &&
+      !original.url.includes('/auth/login') &&
+      !original.url.includes('/auth/register') &&
+      !original.url.includes('/auth/refresh')
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
@@ -40,7 +47,7 @@ api.interceptors.response.use(
       }
 
       original._retry = true
-      isRefreshing    = true
+      isRefreshing = true
 
       try {
         const { data } = await axios.post(
@@ -48,9 +55,12 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         )
+
         const newToken = data.data.accessToken
         store.dispatch(setAccessToken(newToken))
+
         processQueue(null, newToken)
+
         original.headers.Authorization = `Bearer ${newToken}`
         return api(original)
       } catch (err) {
