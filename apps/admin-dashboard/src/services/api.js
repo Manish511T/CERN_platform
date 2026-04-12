@@ -5,50 +5,42 @@ import { logout, setAccessToken } from '../store/slices/authSlice'
 
 const api = axios.create({
   baseURL:         `${API_BASE_URL}/api`,
-  withCredentials: true,   // sends httpOnly refresh token cookie
+  withCredentials: true,
 })
 
-// ── Request interceptor ───────────────────────────────────────────────────────
-// Attach access token to every request
 api.interceptors.request.use((config) => {
   const token = store.getState().auth.accessToken
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// ── Response interceptor ─────────────────────────────────────────────────────
-// Handle token expiry and refresh silently
-
-let isRefreshing  = false
-let failedQueue   = []
+let isRefreshing = false
+let failedQueue  = []
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
+  failedQueue.forEach(({ resolve, reject }) =>
     error ? reject(error) : resolve(token)
-  })
+  )
   failedQueue = []
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (res) => res,
   async (error) => {
-    const originalRequest = error.config
+    const original = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !original._retry) {
       if (isRefreshing) {
-        // Queue this request until refresh completes
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return api(originalRequest)
+          original.headers.Authorization = `Bearer ${token}`
+          return api(original)
         })
       }
 
-      originalRequest._retry = true
-      isRefreshing = true
+      original._retry = true
+      isRefreshing    = true
 
       try {
         const { data } = await axios.post(
@@ -56,17 +48,15 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         )
-
         const newToken = data.data.accessToken
         store.dispatch(setAccessToken(newToken))
         processQueue(null, newToken)
-
-        originalRequest.headers.Authorization = `Bearer ${newToken}`
-        return api(originalRequest)
-      } catch (refreshError) {
-        processQueue(refreshError, null)
+        original.headers.Authorization = `Bearer ${newToken}`
+        return api(original)
+      } catch (err) {
+        processQueue(err, null)
         store.dispatch(logout())
-        return Promise.reject(refreshError)
+        return Promise.reject(err)
       } finally {
         isRefreshing = false
       }

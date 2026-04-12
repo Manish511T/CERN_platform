@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+export const API_BASE_URL = import.meta.env.VITE_API_URL    || 'http://localhost:5000'
 export const SOCKET_URL   = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
 
 export const ROLES = Object.freeze({
@@ -16,19 +16,10 @@ export const SOS_STATUS = Object.freeze({
   ESCALATED: 'escalated',
 })
 
-export const EMERGENCY_TYPE = Object.freeze({
-  ACCIDENT:   'accident',
-  CARDIAC:    'cardiac',
-  SNAKE_BITE: 'snake_bite',
-  RABIES:     'rabies',
-  OTHER:      'other',
-})
-
-export const SOCKET_EVENTS = Object.freeze({
-  SOS_ALERT:       'sos:alert',
-  SOS_ACCEPTED:    'sos:accepted',
-  SOS_ESCALATED:   'sos:escalated',
-  VOLUNTEER_OFFLINE: 'volunteer:offline',
-  LOCATION_UPDATE: 'location:update',
-  VOLUNTEER_LOCATION: 'volunteer:location',
-})
+export const EMERGENCY_LABELS = {
+  accident:   { label: 'Accident',   emoji: '🚗', color: 'yellow' },
+  cardiac:    { label: 'Cardiac',    emoji: '❤️', color: 'red'    },
+  snake_bite: { label: 'Snake Bite', emoji: '🐍', color: 'green'  },
+  rabies:     { label: 'Rabies',     emoji: '🐕', color: 'purple' },
+  other:      { label: 'Other',      emoji: '🆘', color: 'blue'   },
+}
