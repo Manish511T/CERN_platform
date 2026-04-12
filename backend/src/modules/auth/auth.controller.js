@@ -2,6 +2,7 @@ import asyncHandler from '../../utils/asyncHandler.js'
 import { sendSuccess, sendCreated } from '../../utils/response.utils.js'
 import * as authService from './auth.service.js'
 import { env } from '../../config/env.js'
+import { ROLES } from '../../shared/constants.js'
 
 // Cookie config — refresh token lives here
 const REFRESH_COOKIE_OPTIONS = {
@@ -29,6 +30,11 @@ export const login = asyncHandler(async (req, res) => {
   const { user, accessToken, refreshToken } = await authService.login({
     email, password,
   })
+
+  if (![ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN].includes(user.role)) {
+    return res.status(403).json({ message: 'Admins only' })
+  }
+
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
 
