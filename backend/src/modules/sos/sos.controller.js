@@ -129,6 +129,11 @@ export const getHistory = asyncHandler(async (req, res) => {
 })
 
 export const getActive = asyncHandler(async (req, res) => {
-  const records = await sosService.getActiveSOSList()
+  const { role, branchId } = req.user
+
+  const records = await sosService.getActiveSOSList(
+    role === 'branch_admin' ? branchId : null
+  )
+
   sendSuccess(res, { records })
 })

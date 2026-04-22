@@ -303,10 +303,16 @@ export const getHistory = async ({ userId, role, page, limit }) => {
 
 // ─── GET ACTIVE (Admin use) ───────────────────────────────────────────────────
 
-export const getActiveSOSList = async () => {
-  return SOS.find({ status: SOS_STATUS.ACTIVE })
+export const getActiveSOSList = async (branchId = null) => {
+  const query = { status: SOS_STATUS.ACTIVE }
+
+  if (branchId) {
+    query.branchId = branchId
+  }
+
+  return SOS.find(query)
     .sort({ createdAt: -1 })
     .populate('triggeredBy', 'name phone')
-    .populate('branchId', 'name')
+    .populate('branchId', 'name code')
     .lean()
 }

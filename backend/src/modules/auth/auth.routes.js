@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import * as authController from './auth.controller.js'
 import protect from '../../middleware/protect.js'
-import authorize from '../../middleware/authorize.js'
+import { authorize, volunteerOnly, superAdminOnly } from '../../middleware/authorize.js'
 import validate from '../../middleware/validate.js'
 import rateLimiter from '../../middleware/rateLimiter.js'
-import { ROLES } from '../../shared/constants.js'
 import {
   registerSchema,
+  adminCreateUserSchema,
   loginSchema,
   updateLocationSchema,
   registerFCMSchema,
@@ -14,35 +14,57 @@ import {
 
 const router = Router()
 
-// ── Public routes ─────────────────────────────────────────────────────────────
-router.post('/register', rateLimiter.auth, validate(registerSchema), authController.register)
-router.post('/login',    rateLimiter.auth, validate(loginSchema),    authController.login)
-router.post('/refresh',                                               authController.refresh)
-router.post('/logout',   protect,                                     authController.logout)
-
-
-// ── Protected routes ──────────────────────────────────────────────────────────
-router.get('/me',       protect,                                      authController.getMe)
-
-router.patch(
-  '/duty',
-  protect,
-  authorize(ROLES.VOLUNTEER),
-  authController.toggleDuty
+// ── Public ────────────────────────────────────────────────────────────────────
+router.post('/register',
+  rateLimiter.auth,
+  validate(registerSchema),         // enforces user|volunteer only
+  authController.register
 )
 
-router.post(
-  '/location',
+router.post('/login',
+  rateLimiter.auth,
+  validate(loginSchema),
+  authController.login
+)
+
+router.post('/refresh', authController.refresh)
+
+// ── Authenticated ─────────────────────────────────────────────────────────────
+router.post('/logout',
+  protect,
+  authController.logout
+)
+
+router.get('/me',
+  protect,
+  authController.getMe
+)
+
+router.post('/location',
   protect,
   validate(updateLocationSchema),
   authController.updateLocation
 )
 
-router.post(
-  '/fcm-token',
+router.post('/fcm-token',
   protect,
   validate(registerFCMSchema),
   authController.registerFCMToken
+)
+
+// Volunteer only — duty toggle
+router.patch('/duty',
+  protect,
+  volunteerOnly,
+  authController.toggleDuty
+)
+
+// Super Admin only — create any role (branch_admin, super_admin, etc.)
+router.post('/admin/create-user',
+  protect,
+  superAdminOnly,
+  validate(adminCreateUserSchema),
+  authController.adminCreateUser
 )
 
 export default router

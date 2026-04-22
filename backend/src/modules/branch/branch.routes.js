@@ -1,8 +1,13 @@
 import { Router } from 'express'
 import protect from '../../middleware/protect.js'
-import authorize from '../../middleware/authorize.js'
+import {
+  superAdminOnly,
+  adminOnly,
+  authorize,
+  requireBranchAssignment,
+  requireOwnBranch,
+} from '../../middleware/authorize.js'
 import validate from '../../middleware/validate.js'
-import { ROLES } from '../../shared/constants.js'
 import * as branchController from './branch.controller.js'
 import {
   createBranchSchema,
@@ -16,52 +21,49 @@ const router = Router()
 
 router.use(protect)
 
-// ── Collection routes (no param) ──────────────────────────────────────────────
-router.get('/',
-  branchController.getAllBranches
-)
-
+// ── Super Admin only ──────────────────────────────────────────────────────────
 router.post('/',
-  authorize(ROLES.SUPER_ADMIN),
+  superAdminOnly,
   validate(createBranchSchema),
   branchController.createBranch
 )
 
-// ── Sub-resource routes (specific paths before /:branchId) ────────────────────
+router.delete('/:branchId',
+  superAdminOnly,
+  validate(branchParamSchema),
+  branchController.deleteBranch
+)
+
 router.post('/:branchId/assign-admin',
-  authorize(ROLES.SUPER_ADMIN),
+  superAdminOnly,
   validate(assignAdminSchema),
   branchController.assignAdmin
 )
 
+// ── Super Admin + Branch Admin (own branch only) ──────────────────────────────
+router.patch('/:branchId',
+  adminOnly,
+  requireOwnBranch,     // branch_admin can only edit their own branch
+  validate(updateBranchSchema),
+  branchController.updateBranch
+)
+
 router.post('/:branchId/volunteers',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+  adminOnly,
+  requireOwnBranch,     // branch_admin can only manage their own branch
   validate(assignVolunteerSchema),
   branchController.manageVolunteer
 )
 
 router.get('/:branchId/volunteers',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+  adminOnly,
+  requireOwnBranch,     // branch_admin can only view their own branch
   validate(branchParamSchema),
   branchController.getBranchVolunteers
 )
 
-// ── Single resource routes (/:branchId last) ──────────────────────────────────
-router.get('/:branchId',
-  validate(branchParamSchema),
-  branchController.getBranchById
-)
-
-router.patch('/:branchId',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
-  validate(updateBranchSchema),
-  branchController.updateBranch
-)
-
-router.delete('/:branchId',
-  authorize(ROLES.SUPER_ADMIN),
-  validate(branchParamSchema),
-  branchController.deleteBranch
-)
+// ── All authenticated users ───────────────────────────────────────────────────
+router.get('/',           branchController.getAllBranches)
+router.get('/:branchId',  validate(branchParamSchema), branchController.getBranchById)
 
 export default router

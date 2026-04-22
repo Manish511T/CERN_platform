@@ -102,6 +102,25 @@ userSchema.methods.comparePassword = async function (plainPassword) {
 
 // Instance method: return safe user object (no sensitive fields)
 userSchema.methods.toSafeObject = function () {
+  // Extract branchId correctly whether it's populated or not
+  let branchId = null
+  let branchInfo = null
+
+  if (this.branchId) {
+    if (typeof this.branchId === 'object' && this.branchId._id) {
+      // Populated object
+      branchId   = this.branchId._id.toString()
+      branchInfo = {
+        _id:  this.branchId._id,
+        name: this.branchId.name,
+        code: this.branchId.code,
+      }
+    } else {
+      // Raw ObjectId
+      branchId = this.branchId.toString()
+    }
+  }
+
   return {
     id:              this._id,
     name:            this.name,
@@ -109,7 +128,8 @@ userSchema.methods.toSafeObject = function () {
     role:            this.role,
     phone:           this.phone,
     isOnDuty:        this.isOnDuty,
-    branchId:        this.branchId,
+    branchId,         // always a string or null
+    branchInfo,       // full branch object or null
     branchVerified:  this.branchVerified,
     location:        this.location,
     isActive:        this.isActive,

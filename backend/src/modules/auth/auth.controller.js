@@ -2,14 +2,12 @@ import asyncHandler from '../../utils/asyncHandler.js'
 import { sendSuccess, sendCreated } from '../../utils/response.utils.js'
 import * as authService from './auth.service.js'
 import { env } from '../../config/env.js'
-import { ROLES } from '../../shared/constants.js'
 
-// Cookie config — refresh token lives here
 const REFRESH_COOKIE_OPTIONS = {
-  httpOnly: true,                                    // JS cannot read it
-  secure: env.NODE_ENV === 'production',             // HTTPS only in production
+  httpOnly: true,
+  secure:   env.NODE_ENV === 'production',
   sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000,                  // 7 days in ms
+  maxAge:   7 * 24 * 60 * 60 * 1000,
 }
 
 export const register = asyncHandler(async (req, res) => {
@@ -20,8 +18,18 @@ export const register = asyncHandler(async (req, res) => {
   })
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
-
   sendCreated(res, { user, accessToken })
+})
+
+// Super admin only — creates any role including branch_admin, super_admin
+export const adminCreateUser = asyncHandler(async (req, res) => {
+  const { name, email, password, role, phone, branchId } = req.body
+
+  const user = await authService.adminCreateUser({
+    name, email, password, role, phone, branchId,
+  })
+
+  sendCreated(res, { user })
 })
 
 export const login = asyncHandler(async (req, res) => {
@@ -31,18 +39,11 @@ export const login = asyncHandler(async (req, res) => {
     email, password,
   })
 
-  // if (![ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN].includes(user.role)) {
-  //   return res.status(403).json({ message: 'Admins only' })
-  // }
-
-
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
-
   sendSuccess(res, { user, accessToken })
 })
 
 export const refresh = asyncHandler(async (req, res) => {
-  // Refresh token comes from httpOnly cookie — not request body
   const incomingRefreshToken = req.cookies?.refreshToken
 
   const { accessToken, refreshToken } = await authService.refreshAccessToken(
@@ -50,17 +51,15 @@ export const refresh = asyncHandler(async (req, res) => {
   )
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
-
   sendSuccess(res, { accessToken })
 })
 
 export const logout = asyncHandler(async (req, res) => {
   await authService.logout(req.user._id)
 
-  // Clear the cookie
   res.clearCookie('refreshToken', {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure:   env.NODE_ENV === 'production',
     sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
   })
 

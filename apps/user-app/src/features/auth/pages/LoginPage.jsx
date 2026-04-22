@@ -6,22 +6,22 @@ import { Button, Input, Card } from '../../../shared/components/ui'
 import useLogin from '../hooks/useLogin'
 
 const LoginPage = () => {
-  const [form,      setForm]      = useState({ email: '', password: '' })
-  const [showPass,  setShowPass]  = useState(false)
+  const [form, setForm] = useState({ email: '', password: '' })
+  const [showPass, setShowPass] = useState(false)
+
   const { handleLogin, loading, error } = useLogin()
 
   const handleChange = (e) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    handleLogin(form)
+    await handleLogin(form)
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-slate-50
-                    flex items-center justify-center p-4">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-slate-50 flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -30,8 +30,7 @@ const LoginPage = () => {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16
-                          bg-blue-600 rounded-2xl shadow-lg mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg mb-4">
             <Heart className="w-8 h-8 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Welcome to CERN</h1>
@@ -94,6 +93,7 @@ const LoginPage = () => {
               type="submit"
               size="full"
               loading={loading}
+              disabled={loading}
               className="mt-2"
             >
               Sign in
@@ -104,8 +104,7 @@ const LoginPage = () => {
             Don't have an account?{' '}
             <Link
               to="/register"
-              className="text-blue-600 font-medium hover:text-blue-700
-                         transition-colors"
+              className="text-blue-600 font-medium hover:text-blue-700 transition-colors"
             >
               Create one
             </Link>

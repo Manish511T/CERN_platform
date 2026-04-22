@@ -62,17 +62,22 @@ export const getAllUsers = async ({
 }) => {
   const query = {}
 
-  // Branch admin can only see users/volunteers in their branch
-  if (requestingUser.role === ROLES.BRANCH_ADMIN) {
+  // STRICT: branch_admin can ONLY see volunteers in their own branch
+  if (requestingUser.role === 'branch_admin') {
+    if (!requestingUser.branchId) {
+      return { users: [], total: 0, page, pages: 0 }
+    }
+    // Branch admins see volunteers assigned to their branch only
     query.branchId = requestingUser.branchId
+    query.role     = 'volunteer'
+    // Ignore any role/branchId filter params — they cannot override this
   } else {
+    // Super admin — apply requested filters
+    if (role)     query.role     = role
     if (branchId) query.branchId = branchId
+    if (isActive !== undefined) query.isActive = isActive === 'true'
   }
 
-  if (role)               query.role     = role
-  if (isActive !== undefined) query.isActive = isActive === 'true'
-
-  // Search by name or email
   if (search) {
     query.$or = [
       { name:  { $regex: search, $options: 'i' } },
@@ -91,12 +96,7 @@ export const getAllUsers = async ({
     User.countDocuments(query),
   ])
 
-  return {
-    users,
-    total,
-    page,
-    pages: Math.ceil(total / limit),
-  }
+  return { users, total, page, pages: Math.ceil(total / limit) }
 }
 
 // ─── DEACTIVATE USER ─────────────────────────────────────────────────────────

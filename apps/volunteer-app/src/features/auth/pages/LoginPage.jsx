@@ -1,50 +1,58 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
-import { useDispatch } from 'react-redux'
-import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { setCredentials } from '../../../store/slices/authSlice'
-import { setDutyStatus }  from '../../../store/slices/dutySlice'
-import { loginApi }       from '../services/authApi'
-import socket             from '../../../socket/socket'
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Eye, EyeOff, Mail, Lock, Shield } from "lucide-react";
+import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { setCredentials } from "../../../store/slices/authSlice";
+import { setDutyStatus } from "../../../store/slices/dutySlice";
+import { loginApi } from "../services/authApi";
+import socket from "../../../socket/socket";
 
 const LoginPage = () => {
-  const [form,     setForm]    = useState({ email: '', password: '' })
-  const [showPass, setShowPass] = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const dispatch   = useDispatch()
-  const navigate   = useNavigate()
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const handleChange = (e) =>
-    setForm(p => ({ ...p, [e.target.name]: e.target.value }))
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
     try {
-      const { data } = await loginApi(form)
-      const { user, accessToken } = data.data
+      const { data } = await loginApi(form);
+      const { user, accessToken } = data.data;
 
-      dispatch(setCredentials({ user, accessToken }))
-      dispatch(setDutyStatus(user.isOnDuty || false))
+      if (user.role !== "volunteer") {
+        toast.error("This app is for volunteers only.");
+        setLoading(false);
+        return;
+      }
 
-      socket.auth = { token: accessToken }
-      socket.connect()
+      dispatch(setCredentials({ user, accessToken }));
+      dispatch(setDutyStatus(user.isOnDuty || false));
 
-      toast.success(`Welcome, ${user.name.split(' ')[0]}!`)
-      navigate('/dashboard', { replace: true })
+      socket.auth = { token: accessToken };
+      socket.connect();
+
+      toast.success(`Welcome, ${user.name.split(" ")[0]}!`);
+      navigate("/dashboard", { replace: true });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Login failed.')
+      toast.error(err.response?.data?.error || "Login failed.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-green-50 via-white
-                    to-slate-50 flex items-center justify-center p-4">
+    <div
+      className="min-h-screen bg-linear-to-br from-green-50 via-white
+                    to-slate-50 flex items-center justify-center p-4"
+    >
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -52,8 +60,10 @@ const LoginPage = () => {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16
-                          bg-green-600 rounded-2xl shadow-lg mb-4">
+          <div
+            className="inline-flex items-center justify-center w-16 h-16
+                          bg-green-600 rounded-2xl shadow-lg mb-4"
+          >
             <Shield className="w-8 h-8 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">CERN Volunteer</h1>
@@ -62,8 +72,10 @@ const LoginPage = () => {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100
-                        shadow-sm p-8">
+        <div
+          className="bg-white rounded-2xl border border-slate-100
+                        shadow-sm p-8"
+        >
           <h2 className="text-lg font-semibold text-slate-800 mb-6">
             Volunteer Sign in
           </h2>
@@ -75,8 +87,10 @@ const LoginPage = () => {
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2
-                                 w-4 h-4 text-slate-400" />
+                <Mail
+                  className="absolute left-3 top-1/2 -translate-y-1/2
+                                 w-4 h-4 text-slate-400"
+                />
                 <input
                   name="email"
                   type="email"
@@ -98,11 +112,13 @@ const LoginPage = () => {
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2
-                                 w-4 h-4 text-slate-400" />
+                <Lock
+                  className="absolute left-3 top-1/2 -translate-y-1/2
+                                 w-4 h-4 text-slate-400"
+                />
                 <input
                   name="password"
-                  type={showPass ? 'text' : 'password'}
+                  type={showPass ? "text" : "password"}
                   value={form.password}
                   onChange={handleChange}
                   placeholder="Enter password"
@@ -114,14 +130,15 @@ const LoginPage = () => {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPass(p => !p)}
+                  onClick={() => setShowPass((p) => !p)}
                   className="absolute right-3 top-1/2 -translate-y-1/2
                              text-slate-400 hover:text-slate-600"
                 >
-                  {showPass
-                    ? <EyeOff className="w-4 h-4" />
-                    : <Eye    className="w-4 h-4" />
-                  }
+                  {showPass ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -136,24 +153,28 @@ const LoginPage = () => {
                          flex items-center justify-center gap-2"
             >
               {loading && (
-                <span className="w-4 h-4 border-2 border-white
-                                 border-t-transparent rounded-full animate-spin" />
+                <span
+                  className="w-4 h-4 border-2 border-white
+                                 border-t-transparent rounded-full animate-spin"
+                />
               )}
               Sign in
             </motion.button>
           </form>
 
           <p className="text-center text-sm text-slate-500 mt-6">
-            New volunteer?{' '}
-            <Link to="/register"
-              className="text-green-600 font-medium hover:text-green-700">
+            New volunteer?{" "}
+            <Link
+              to="/register"
+              className="text-green-600 font-medium hover:text-green-700"
+            >
               Register here
             </Link>
           </p>
         </div>
       </motion.div>
     </div>
-  )
-}
+  );
+};
 
-export default LoginPage
+export default LoginPage;

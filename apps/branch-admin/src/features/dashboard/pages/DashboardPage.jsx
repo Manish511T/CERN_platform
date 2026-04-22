@@ -40,7 +40,9 @@ const DashboardPage = () => {
   const [activeSOS, setActiveSOS] = useState([])
   const [loading,   setLoading]   = useState(true)
 
-  const branchId = user?.branchId
+  const branchId = user?.branchId?._id
+  ? user.branchId._id.toString()
+  : user?.branchId?.toString() || null
 
   const load = async () => {
     if (!branchId) return

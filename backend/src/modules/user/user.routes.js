@@ -1,8 +1,12 @@
 import { Router } from 'express'
 import protect from '../../middleware/protect.js'
-import authorize from '../../middleware/authorize.js'
+import {
+  superAdminOnly,
+  adminOnly,
+  authorize,
+  requireBranchAssignment,
+} from '../../middleware/authorize.js'
 import validate from '../../middleware/validate.js'
-import { ROLES } from '../../shared/constants.js'
 import * as userController from './user.controller.js'
 import {
   updateProfileSchema,
@@ -14,49 +18,46 @@ const router = Router()
 
 router.use(protect)
 
-// ── Own profile ───────────────────────────────────────────────────────────────
-router.get('/me',     userController.getMyProfile)
-router.patch('/me',   validate(updateProfileSchema), userController.updateMyProfile)
+// ── Own profile — any authenticated user ──────────────────────────────────────
+router.get('/me',    userController.getMyProfile)
+router.patch('/me',  validate(updateProfileSchema), userController.updateMyProfile)
 
-// ── Volunteer specific ────────────────────────────────────────────────────────
-router.get(
-  '/volunteers/online',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+// ── Online volunteers — admins only ──────────────────────────────────────────
+router.get('/volunteers/online',
+  adminOnly,
   userController.getOnlineVolunteers
 )
 
-router.get(
-  '/:userId/stats',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN, ROLES.VOLUNTEER),
+// ── Volunteer stats — admins + the volunteer themselves ───────────────────────
+router.get('/:userId/stats',
+  authorize('super_admin', 'branch_admin', 'volunteer'),
   validate(userParamSchema),
   userController.getVolunteerStats
 )
 
-// ── Admin routes ──────────────────────────────────────────────────────────────
-router.get(
-  '/',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+// ── User list — admins only (filtered by branch for branch_admin) ─────────────
+router.get('/',
+  adminOnly,
   validate(getUsersQuerySchema),
   userController.getAllUsers
 )
 
-router.get(
-  '/:userId',
-  authorize(ROLES.SUPER_ADMIN, ROLES.BRANCH_ADMIN),
+// ── Single user detail — admins only ─────────────────────────────────────────
+router.get('/:userId',
+  adminOnly,
   validate(userParamSchema),
   userController.getUserById
 )
 
-router.patch(
-  '/:userId/deactivate',
-  authorize(ROLES.SUPER_ADMIN),
+// ── Activate / Deactivate — super admin only ─────────────────────────────────
+router.patch('/:userId/deactivate',
+  superAdminOnly,
   validate(userParamSchema),
   userController.deactivateUser
 )
 
-router.patch(
-  '/:userId/reactivate',
-  authorize(ROLES.SUPER_ADMIN),
+router.patch('/:userId/reactivate',
+  superAdminOnly,
   validate(userParamSchema),
   userController.reactivateUser
 )
