@@ -82,7 +82,7 @@ const VolunteerCard = ({ volunteer, branchId, onRefresh }) => {
         <div className="flex items-start gap-4">
           <div className={`
             w-12 h-12 rounded-full flex items-center justify-center
-            text-lg font-bold flex-shrink-0
+            text-lg font-bold shrink-0
             ${volunteer.branchVerified
               ? 'bg-teal-100 text-teal-600'
               : 'bg-slate-100 text-slate-500'
@@ -334,7 +334,7 @@ const VolunteersPage = () => {
         </div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6
                         flex items-start gap-4">
-          <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="w-6 h-6 text-yellow-600 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold text-yellow-800">No Branch Assigned</p>
             <p className="text-yellow-700 text-sm mt-1">
@@ -404,7 +404,7 @@ const VolunteersPage = () => {
             className="mb-5 bg-yellow-50 border border-yellow-200 rounded-2xl
                        p-4 flex items-start gap-3"
           >
-            <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold text-yellow-800 text-sm">
                 {pendingCount} volunteer{pendingCount > 1 ? 's' : ''} pending verification
@@ -417,7 +417,7 @@ const VolunteersPage = () => {
               onClick={() => setFilter('pending')}
               className="px-3 py-1.5 bg-yellow-200 hover:bg-yellow-300
                          text-yellow-800 text-xs font-semibold rounded-lg
-                         transition-colors flex-shrink-0"
+                         transition-colors shrink-0"
             >
               Show pending
             </button>

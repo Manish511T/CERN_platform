@@ -3,12 +3,24 @@ import { sendSuccess, sendCreated } from '../../utils/response.utils.js'
 import * as authService from './auth.service.js'
 import { env } from '../../config/env.js'
 
-const REFRESH_COOKIE_OPTIONS = {
+// Each app gets its own cookie name — prevents cross-app cookie conflicts
+// when all apps run on localhost simultaneously
+const COOKIE_NAME_BY_ROLE = {
+  user:         'refreshToken_user',
+  volunteer:    'refreshToken_volunteer',
+  branch_admin: 'refreshToken_branch',
+  super_admin:  'refreshToken_admin',
+}
+
+const getCookieName = (role) =>
+  COOKIE_NAME_BY_ROLE[role] || 'refreshToken'
+
+const cookieOptions = (maxAge = 7 * 24 * 60 * 60 * 1000) => ({
   httpOnly: true,
   secure:   env.NODE_ENV === 'production',
   sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  maxAge:   7 * 24 * 60 * 60 * 1000,
-}
+  maxAge,
+})
 
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone } = req.body
@@ -17,18 +29,15 @@ export const register = asyncHandler(async (req, res) => {
     name, email, password, role, phone,
   })
 
-  res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
+  res.cookie(getCookieName(user.role), refreshToken, cookieOptions())
   sendCreated(res, { user, accessToken })
 })
 
-// Super admin only — creates any role including branch_admin, super_admin
 export const adminCreateUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, branchId } = req.body
-
   const user = await authService.adminCreateUser({
     name, email, password, role, phone, branchId,
   })
-
   sendCreated(res, { user })
 })
 
@@ -39,25 +48,32 @@ export const login = asyncHandler(async (req, res) => {
     email, password,
   })
 
-  res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
+  res.cookie(getCookieName(user.role), refreshToken, cookieOptions())
   sendSuccess(res, { user, accessToken })
 })
 
 export const refresh = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies?.refreshToken
+  // Try all possible cookie names — works for any app
+  const incomingToken =
+    req.cookies?.refreshToken_user     ||
+    req.cookies?.refreshToken_volunteer ||
+    req.cookies?.refreshToken_branch   ||
+    req.cookies?.refreshToken_admin    ||
+    req.cookies?.refreshToken           // legacy fallback
 
-  const { accessToken, refreshToken } = await authService.refreshAccessToken(
-    incomingRefreshToken
-  )
+  const { accessToken, refreshToken, role } =
+    await authService.refreshAccessToken(incomingToken)
 
-  res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS)
+  // Re-set with role-specific name
+  res.cookie(getCookieName(role), refreshToken, cookieOptions())
   sendSuccess(res, { accessToken })
 })
 
 export const logout = asyncHandler(async (req, res) => {
   await authService.logout(req.user._id)
 
-  res.clearCookie('refreshToken', {
+  const cookieName = getCookieName(req.user.role)
+  res.clearCookie(cookieName, {
     httpOnly: true,
     secure:   env.NODE_ENV === 'production',
     sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',

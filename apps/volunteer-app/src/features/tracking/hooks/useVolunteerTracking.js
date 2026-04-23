@@ -14,7 +14,7 @@ const GPS_OPTIONS = {
 const EMIT_INTERVAL_MS = 3000
 
 const useVolunteerTracking = () => {
-  const activeRescue  = useSelector(selectActiveRescue)
+  const activeRescue = useSelector(selectActiveRescue)
 
   const [myPosition, setMyPosition] = useState(null)
   const [distance,   setDistance]   = useState(null)
@@ -24,14 +24,17 @@ const useVolunteerTracking = () => {
   const lastEmitRef = useRef(0)
   const watchIdRef  = useRef(null)
 
-  // Derive victimPosition directly from activeRescue — no state needed
+  // Victim position comes directly from Redux (already lat/lng numbers)
   const victimPosition = useMemo(() => {
-    if (!activeRescue?.victimLocation?.coordinates) return null
-    const [lng, lat] = activeRescue.victimLocation.coordinates
-    return { latitude: lat, longitude: lng }
+    if (activeRescue?.victimLat == null || activeRescue?.victimLng == null) {
+      return null
+    }
+    return {
+      latitude:  activeRescue.victimLat,
+      longitude: activeRescue.victimLng,
+    }
   }, [activeRescue])
 
-  // Broadcast volunteer GPS to victim via socket
   const broadcastLocation = useCallback((latitude, longitude) => {
     if (!activeRescue?.sosId || !activeRescue?.victimId) return
 
@@ -45,11 +48,21 @@ const useVolunteerTracking = () => {
       longitude,
       toUserId: activeRescue.victimId,
     })
+
+    console.log('📍 Broadcasting location to victim:', activeRescue.victimId, { latitude, longitude })
   }, [activeRescue])
 
-  // Watch GPS and broadcast
   useEffect(() => {
     if (!activeRescue) return
+
+    console.log('=== TRACKING STARTED ===')
+    console.log('activeRescue:', activeRescue)
+    console.log('victimPosition:', victimPosition)
+
+    if (!navigator.geolocation) {
+      setGpsStatus('error')
+      return
+    }
 
     setGpsStatus('acquiring')
 
@@ -61,23 +74,26 @@ const useVolunteerTracking = () => {
         setGpsStatus(accuracy <= 50 ? 'active' : 'low_accuracy')
         broadcastLocation(latitude, longitude)
 
-        // Calculate distance + ETA using victimPosition from memo
         if (victimPosition) {
           const dist = getDistanceMeters(
-            latitude,               longitude,
+            latitude, longitude,
             victimPosition.latitude, victimPosition.longitude
           )
           setDistance(Math.round(dist))
           setEta(getETAMinutes(dist))
         }
       },
-      () => setGpsStatus('error'),
+      (err) => {
+        console.error('GPS error:', err)
+        setGpsStatus('error')
+      },
       GPS_OPTIONS
     )
 
     return () => {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
       }
     }
   }, [activeRescue, broadcastLocation, victimPosition])

@@ -10,6 +10,7 @@ import sosRoutes from './src/modules/sos/sos.routes.js'
 import branchRoutes from './src/modules/branch/branch.routes.js'
 import userRoutes   from './src/modules/user/user.routes.js'  
 import notificationRoutes from './src/modules/notification/notification.routes.js'
+import { listOnlineSockets } from './src/socket/socket.manager.js'
 
 const app = express()
 
@@ -44,6 +45,14 @@ app.use('/api/user',   userRoutes)
 app.use('/api/notification', notificationRoutes)  
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }))
+
+app.get('/debug/sockets', async (req, res) => {
+  const online = await listOnlineSockets()
+  res.json({
+    count:   Object.keys(online).length,
+    sockets: online,
+  })
+})
 
 app.use((req, res, next) => next(new NotFoundError(`Route ${req.originalUrl}`)))
 app.use(errorHandler)

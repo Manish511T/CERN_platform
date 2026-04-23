@@ -1,19 +1,14 @@
 import { createSlice } from '@reduxjs/toolkit'
 
 const initialState = {
-  // Incoming SOS alert (before accepting)
   incomingAlert: null,
-
-  // Active rescue session (after accepting)
-  activeRescue: null,
+  activeRescue:  null,
+  // activeRescue shape:
   // {
   //   sosId, victimId, victimName, victimPhone,
-  //   victimLocation: { coordinates: [lng, lat] }
+  //   victimLat, victimLng  ← always numbers, never raw coordinates array
   // }
-
-  // Alert history
-  history: [],
-
+  history:   [],
   isLoading: false,
 }
 
@@ -31,7 +26,7 @@ const alertSlice = createSlice({
 
     setActiveRescue: (state, action) => {
       state.activeRescue  = action.payload
-      state.incomingAlert = null  // clear alert once accepted
+      state.incomingAlert = null
     },
 
     clearActiveRescue: (state) => {

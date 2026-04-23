@@ -19,48 +19,68 @@ export const triggerSOS = asyncHandler(async (req, res) => {
     address, photoUrl, voiceNoteUrl,
   })
 
-  const io = getIO()
-  const payload = {
-    sosId:         sos._id,
-    emergencyType: sos.emergencyType,
-    location:      sos.location,
-    photoUrl:      sos.photoUrl,
-    triggeredBy:   { name: req.user.name },
-  }
+  // ── DEBUG: Print exactly what we found ─────────────────────────────────────
+  console.log('\n========== SOS DISPATCH DEBUG ==========')
+  console.log('SOS ID:', sos._id.toString())
+  console.log('Source:', source)
+  console.log('Volunteers found:', volunteers.length)
+  volunteers.forEach((v, i) => {
+    console.log(`  Volunteer[${i}]: id=${v._id} name=${v.name} isOnDuty=${v.isOnDuty}`)
+  })
 
+  const io = getIO()
   const offlineVolunteers = []
   let socketNotified = 0
 
   for (const vol of volunteers) {
-    const socketId = await getSocketId(vol._id.toString())
+    const volId    = vol._id.toString()
+    const socketId = await getSocketId(volId)
+
+    console.log(`  Socket lookup: userId=${volId} → socketId=${socketId}`)
+
     if (socketId) {
-      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, { ...payload, isVolunteer: true })
+      const payload = {
+        sosId:         sos._id,
+        emergencyType: sos.emergencyType,
+        location:      sos.location,
+        photoUrl:      sos.photoUrl,
+        triggeredBy:   { name: req.user.name },
+        isVolunteer:   true,
+      }
+      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, payload)
       socketNotified++
+      console.log(`  ✅ Socket emitted to ${vol.name} (${socketId})`)
     } else {
       offlineVolunteers.push(vol)
+      console.log(`  ❌ No socket for ${vol.name} — will try push`)
     }
   }
 
+  console.log(`Total: ${socketNotified} via socket, ${offlineVolunteers.length} offline`)
+  console.log('=========================================\n')
+
+  // nearby users
   for (const user of nearbyUsers) {
     const socketId = await getSocketId(user._id.toString())
     if (socketId) {
-      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, { ...payload, isVolunteer: false })
+      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, {
+        sosId:         sos._id,
+        emergencyType: sos.emergencyType,
+        location:      sos.location,
+        photoUrl:      sos.photoUrl,
+        triggeredBy:   { name: req.user.name },
+        isVolunteer:   false,
+      })
     }
   }
 
   if (offlineVolunteers.length) {
-    notificationService.notifyVolunteers(offlineVolunteers, payload).catch(err => {
-      logger.error({ event: 'push_notify_failed', err: err.message })
-    })
+    notificationService.notifyVolunteers(offlineVolunteers, {
+      sosId:         sos._id,
+      emergencyType: sos.emergencyType,
+      location:      sos.location,
+    }).catch(err => logger.error({ event: 'push_notify_failed', err: err.message }))
   }
-
-  logger.info({
-    event:        'sos_dispatched',
-    sosId:        sos._id,
-    socketNotified,
-    pushNotified: offlineVolunteers.length,
-    source,
-  })
 
   sendCreated(res, {
     sosId:              sos._id,
@@ -79,32 +99,30 @@ export const acceptSOS = asyncHandler(async (req, res) => {
 
   const victimSocketId = await getSocketId(victim.id.toString())
 
+  console.log('=== ACCEPT SOS DEBUG ===')
+  console.log('victim.victimLocation:', JSON.stringify(victim.victimLocation))
+  console.log('victimSocketId:', victimSocketId)
+
   if (victimSocketId) {
     getIO().to(victimSocketId).emit(SOCKET_EVENTS.SOS_ACCEPTED, {
       sosId:          sos._id,
       volunteerId:    req.user._id,
       volunteerName:  req.user.name,
       openMap:        true,
-      victimLocation: victim.location,
+      victimLocation: victim.victimLocation,  // ← send the full object
     })
   }
 
-  // Push notification for victim if not on socket
   if (!victimSocketId) {
-    notificationService.notifyVictimAccepted(
-      victim.id,
-      req.user.name,
-      sos._id
-    ).catch(err => {
-      logger.error({ event: 'victim_push_failed', err: err.message })
-    })
+    notificationService.notifyVictimAccepted(victim.id, req.user.name, sos._id)
+      .catch(err => logger.error({ event: 'victim_push_failed', err: err.message }))
   }
 
   sendSuccess(res, {
     victimId:       victim.id,
     victimName:     victim.name,
     victimPhone:    victim.phone,
-    victimLocation: victim.location,
+    victimLocation: victim.victimLocation,   // ← consistent with socket
   })
 })
 

@@ -1,144 +1,117 @@
-import { useState, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useSelector } from 'react-redux'
-import { AlertCircle, Camera, Mic, MicOff, X } from 'lucide-react'
-import { selectActiveSOS, selectLastResult, selectVolunteer } from '../../../store/slices/sosSlice'
-import { Button, Card } from '../../../shared/components/ui'
-import PageWrapper from '../../../shared/components/layout/PageWrapper'
-import CountdownOverlay    from '../components/CountdownOverlay'
-import GPSIndicator        from '../components/GPSIndicator'
-import EmergencyTypeSelector from '../components/EmergencyTypeSelector'
-import SOSSuccessCard      from '../components/SOSSuccessCard'
-import useGPS from '../hooks/useGPS'
-import useSOS from '../hooks/useSOS'
-import toast from 'react-hot-toast'
+import { useState, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useSelector } from "react-redux";
+import { AlertCircle, Camera, Mic, MicOff, X } from "lucide-react";
+import {
+  selectActiveSOS,
+  selectLastResult,
+  selectVolunteer,
+} from "../../../store/slices/sosSlice";
+import { Button, Card } from "../../../shared/components/ui";
+import PageWrapper from "../../../shared/components/layout/PageWrapper";
+import CountdownOverlay from "../components/CountdownOverlay";
+import GPSIndicator from "../components/GPSIndicator";
+import EmergencyTypeSelector from "../components/EmergencyTypeSelector";
+import SOSSuccessCard from "../components/SOSSuccessCard";
+import useGPS from "../hooks/useGPS";
+import useSOS from "../hooks/useSOS";
+import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
+import { selectActiveTracking } from "../../../store/slices/trackingSlice";
 
 const SOSPage = () => {
   // Form state
-  const [emergencyType, setEmergencyType] = useState('accident')
-  const [forSelf,       setForSelf]       = useState(true)
-  const [photo,         setPhoto]         = useState(null)
-  const [photoPreview,  setPhotoPreview]  = useState(null)
-  const [isRecording,   setIsRecording]   = useState(false)
-  const [voiceBlob,     setVoiceBlob]     = useState(null)
+  const [emergencyType, setEmergencyType] = useState("accident");
+  const [forSelf, setForSelf] = useState(true);
+  const [photo, setPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceBlob, setVoiceBlob] = useState(null);
 
-  const photoInputRef  = useRef(null)
-  const mediaRecorder  = useRef(null)
-  const audioChunks    = useRef([])
-  const cancelCountRef = useRef(null)
+  const photoInputRef = useRef(null);
+  const mediaRecorder = useRef(null);
+  const audioChunks = useRef([]);
+  const cancelCountRef = useRef(null);
 
   // Redux state
-  const activeSOS  = useSelector(selectActiveSOS)
-  const lastResult = useSelector(selectLastResult)
-  const volunteer  = useSelector(selectVolunteer)
+  const navigate = useNavigate();
+  const activeSOS = useSelector(selectActiveSOS);
+  const lastResult = useSelector(selectLastResult);
+  const volunteer = useSelector(selectVolunteer);
+  const activeTracking = useSelector(selectActiveTracking);
 
   // Hooks
   const {
-    location, gpsStatus,
+    location,
+    gpsStatus,
     getFreshLocation,
-    accuracyColor, accuracyLabel,
-  } = useGPS()
+    accuracyColor,
+    accuracyLabel,
+  } = useGPS();
 
-  const {
-    countdown,
-    startCountdown,
-    triggerSOS,
-    cancelSOS,
-    resolveSOS,
-  } = useSOS()
+  const { countdown, startCountdown, triggerSOS, cancelSOS, resolveSOS } =
+    useSOS();
 
-  // ── Photo handler ───────────────────────────────────────────────────────────
-  const handlePhotoChange = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhoto(file)
-    setPhotoPreview(URL.createObjectURL(file))
-  }
-
-  const removePhoto = () => {
-    setPhoto(null)
-    setPhotoPreview(null)
-    if (photoInputRef.current) photoInputRef.current.value = ''
-  }
-
-  // ── Voice recording ─────────────────────────────────────────────────────────
-  const toggleRecording = async () => {
-    if (isRecording) {
-      mediaRecorder.current?.stop()
-      setIsRecording(false)
-      return
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      audioChunks.current = []
-
-      const recorder = new MediaRecorder(stream)
-      mediaRecorder.current = recorder
-
-      recorder.ondataavailable = (e) => {
-        audioChunks.current.push(e.data)
-      }
-
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: 'audio/webm' })
-        setVoiceBlob(blob)
-        stream.getTracks().forEach(t => t.stop())
-      }
-
-      recorder.start()
-      setIsRecording(true)
-    } catch {
-      toast.error('Microphone access denied.')
-    }
-  }
-
-  const removeVoice = () => setVoiceBlob(null)
-
-  // ── SOS Submit ──────────────────────────────────────────────────────────────
+    // ── SOS Submit ──────────────────────────────────────────────────────────────
   const handleSOSSubmit = useCallback(() => {
-    if (gpsStatus === 'error') {
-      toast.error('GPS required to send SOS.')
-      return
+    if (gpsStatus === "error") {
+      toast.error("GPS required to send SOS.");
+      return;
     }
 
     // Start countdown — fire SOS when it reaches 0
     cancelCountRef.current = startCountdown(async () => {
       try {
-        const freshLocation = await getFreshLocation()
+        const freshLocation = await getFreshLocation();
 
         await triggerSOS({
-          latitude:      freshLocation.latitude,
-          longitude:     freshLocation.longitude,
+          latitude: freshLocation.latitude,
+          longitude: freshLocation.longitude,
           emergencyType,
           forSelf,
-          photo:         photo    || undefined,
-          voice:         voiceBlob
-            ? new File([voiceBlob], 'voice.webm', { type: 'audio/webm' })
+          photo: photo || undefined,
+          voice: voiceBlob
+            ? new File([voiceBlob], "voice.webm", { type: "audio/webm" })
             : undefined,
-        })
+        });
       } catch {
-        toast.error('Could not get fresh location. Using last known.')
+        toast.error("Could not get fresh location. Using last known.");
         if (location) {
           await triggerSOS({
-            latitude:      location.latitude,
-            longitude:     location.longitude,
+            latitude: location.latitude,
+            longitude: location.longitude,
             emergencyType,
             forSelf,
-          })
+          });
         }
       }
-    })
+    });
   }, [
-    gpsStatus, location, emergencyType, forSelf,
-    photo, voiceBlob, startCountdown, getFreshLocation, triggerSOS,
-  ])
+    gpsStatus,
+    location,
+    emergencyType,
+    forSelf,
+    photo,
+    voiceBlob,
+    startCountdown,
+    getFreshLocation,
+    triggerSOS,
+  ]);
 
-  const handleCancelCountdown = () => {
-    cancelCountRef.current?.()
+   // If tracking is active (volunteer accepted + broadcasting), show link to map
+  if (activeSOS && activeTracking) {
+    return (
+      <PageWrapper title="SOS Active">
+        <SOSSuccessCard
+          result={lastResult}
+          volunteer={volunteer}
+          onResolve={resolveSOS}
+          onCancel={cancelSOS}
+          onOpenMap={() => navigate("/tracking")} 
+        />
+      </PageWrapper>
+    );
   }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
 
   // After SOS triggered — show success/waiting state
   if (activeSOS) {
@@ -151,8 +124,68 @@ const SOSPage = () => {
           onCancel={cancelSOS}
         />
       </PageWrapper>
-    )
+    );
   }
+
+  // ── Photo handler ───────────────────────────────────────────────────────────
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    setPhotoPreview(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+
+ 
+
+  // ── Voice recording ─────────────────────────────────────────────────────────
+  const toggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorder.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks.current = [];
+
+      const recorder = new MediaRecorder(stream);
+      mediaRecorder.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        audioChunks.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunks.current, { type: "audio/webm" });
+        setVoiceBlob(blob);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.error("Microphone access denied.");
+    }
+  };
+
+  const removeVoice = () => setVoiceBlob(null);
+
+
+
+  const handleCancelCountdown = () => {
+    cancelCountRef.current?.();
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  
 
   return (
     <>
@@ -164,7 +197,6 @@ const SOSPage = () => {
 
       <PageWrapper title="Send SOS">
         <div className="space-y-5">
-
           {/* GPS Status */}
           <GPSIndicator
             gpsStatus={gpsStatus}
@@ -179,8 +211,8 @@ const SOSPage = () => {
             </p>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { value: true,  label: 'Myself' },
-                { value: false, label: 'Someone else' },
+                { value: true, label: "Myself" },
+                { value: false, label: "Someone else" },
               ].map(({ value, label }) => (
                 <button
                   key={String(value)}
@@ -189,9 +221,10 @@ const SOSPage = () => {
                   className={`
                     py-2.5 rounded-xl border-2 text-sm font-medium
                     transition-all duration-200
-                    ${forSelf === value
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    ${
+                      forSelf === value
+                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300"
                     }
                   `}
                 >
@@ -213,7 +246,9 @@ const SOSPage = () => {
           <Card padding="md">
             <p className="text-sm font-medium text-slate-700 mb-3">
               Attach evidence
-              <span className="text-slate-400 font-normal ml-1">(optional)</span>
+              <span className="text-slate-400 font-normal ml-1">
+                (optional)
+              </span>
             </p>
 
             <div className="flex gap-3">
@@ -261,9 +296,11 @@ const SOSPage = () => {
               {/* Voice */}
               <div className="flex-1">
                 {voiceBlob ? (
-                  <div className="relative h-24 border-2 border-green-200
+                  <div
+                    className="relative h-24 border-2 border-green-200
                                   bg-green-50 rounded-xl flex flex-col
-                                  items-center justify-center gap-2">
+                                  items-center justify-center gap-2"
+                  >
                     <Mic className="w-5 h-5 text-green-600" />
                     <span className="text-xs text-green-600 font-medium">
                       Recorded
@@ -284,20 +321,24 @@ const SOSPage = () => {
                       w-full h-24 border-2 border-dashed rounded-xl
                       flex flex-col items-center justify-center gap-2
                       transition-all
-                      ${isRecording
-                        ? 'border-red-400 bg-red-50 animate-pulse'
-                        : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50'
+                      ${
+                        isRecording
+                          ? "border-red-400 bg-red-50 animate-pulse"
+                          : "border-slate-200 hover:border-blue-400 hover:bg-blue-50"
                       }
                     `}
                   >
-                    {isRecording
-                      ? <MicOff className="w-5 h-5 text-red-500" />
-                      : <Mic    className="w-5 h-5 text-slate-400" />
-                    }
-                    <span className={`text-xs font-medium ${
-                      isRecording ? 'text-red-500' : 'text-slate-400'
-                    }`}>
-                      {isRecording ? 'Stop' : 'Voice note'}
+                    {isRecording ? (
+                      <MicOff className="w-5 h-5 text-red-500" />
+                    ) : (
+                      <Mic className="w-5 h-5 text-slate-400" />
+                    )}
+                    <span
+                      className={`text-xs font-medium ${
+                        isRecording ? "text-red-500" : "text-slate-400"
+                      }`}
+                    >
+                      {isRecording ? "Stop" : "Voice note"}
                     </span>
                   </button>
                 )}
@@ -309,21 +350,22 @@ const SOSPage = () => {
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={handleSOSSubmit}
-            disabled={gpsStatus === 'error' || gpsStatus === 'idle'}
+            disabled={gpsStatus === "error" || gpsStatus === "idle"}
             className={`
               w-full py-5 rounded-2xl font-bold text-xl text-white
               flex items-center justify-center gap-3
               shadow-lg transition-all duration-200
               disabled:opacity-50 disabled:cursor-not-allowed
-              ${gpsStatus === 'error' || gpsStatus === 'idle'
-                ? 'bg-slate-400'
-                : 'bg-red-500 hover:bg-red-600 active:bg-red-700 shadow-red-200'
+              ${
+                gpsStatus === "error" || gpsStatus === "idle"
+                  ? "bg-slate-400"
+                  : "bg-red-500 hover:bg-red-600 active:bg-red-700 shadow-red-200"
               }
             `}
           >
             <motion.div
               animate={
-                gpsStatus === 'ready' || gpsStatus === 'low_accuracy'
+                gpsStatus === "ready" || gpsStatus === "low_accuracy"
                   ? { scale: [1, 1.2, 1] }
                   : {}
               }
@@ -340,7 +382,7 @@ const SOSPage = () => {
         </div>
       </PageWrapper>
     </>
-  )
-}
+  );
+};
 
-export default SOSPage
+export default SOSPage;

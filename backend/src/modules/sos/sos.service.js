@@ -19,10 +19,9 @@ import logger from '../../config/logger.js'
 // Cascade: branch volunteers → nearby volunteers → global volunteers
 
 const findVolunteersForLocation = async (coordinates) => {
-  // Step 1: find the branch that owns this location
-  // We import Branch lazily here to avoid circular dependency at startup
   const { default: Branch } = await import('../branch/branch.model.js')
 
+  // Step 1: Try branch
   const branch = await Branch.findOne({
     coverageArea: {
       $near: {
@@ -34,12 +33,14 @@ const findVolunteersForLocation = async (coordinates) => {
   })
 
   if (branch) {
-    // Step 2: branch volunteers first (highest priority)
     const branchVolunteers = await User.find({
-      role: ROLES.VOLUNTEER,
-      branchId: branch._id,
-      branchVerified: true,
-      isOnDuty: true,
+      role:            ROLES.VOLUNTEER,
+      branchId:        branch._id,
+      branchVerified:  true,
+      isOnDuty:        true,
+      // Only include volunteers with valid location (not [0,0])
+      'location.coordinates.0': { $ne: 0 },
+      'location.coordinates.1': { $ne: 0 },
       location: {
         $near: {
           $geometry: { type: 'Point', coordinates },
@@ -49,18 +50,16 @@ const findVolunteersForLocation = async (coordinates) => {
     }).limit(10)
 
     if (branchVolunteers.length > 0) {
-      return {
-        volunteers: branchVolunteers,
-        source: ESCALATION_LEVEL.BRANCH,
-        branch,
-      }
+      return { volunteers: branchVolunteers, source: ESCALATION_LEVEL.BRANCH, branch }
     }
   }
 
-  // Step 3: any on-duty volunteer within 5km
+  // Step 2: Nearby volunteers within 5km
   const nearbyVolunteers = await User.find({
-    role: ROLES.VOLUNTEER,
+    role:     ROLES.VOLUNTEER,
     isOnDuty: true,
+    'location.coordinates.0': { $ne: 0 },
+    'location.coordinates.1': { $ne: 0 },
     location: {
       $near: {
         $geometry: { type: 'Point', coordinates },
@@ -70,23 +69,26 @@ const findVolunteersForLocation = async (coordinates) => {
   }).limit(10)
 
   if (nearbyVolunteers.length > 0) {
-    return {
-      volunteers: nearbyVolunteers,
-      source: ESCALATION_LEVEL.NEARBY,
-      branch: null,
-    }
+    return { volunteers: nearbyVolunteers, source: ESCALATION_LEVEL.NEARBY, branch: null }
   }
 
-  // Step 4: global fallback — all on-duty volunteers
-  const globalVolunteers = await User.find({
-    role: ROLES.VOLUNTEER,
+  // Step 3: ALL on-duty volunteers regardless of location
+  // This catches volunteers who haven't updated location yet
+  const allOnDuty = await User.find({
+    role:     ROLES.VOLUNTEER,
     isOnDuty: true,
-  }).limit(5)
+  }).limit(10)
+
+  logger.info({
+    event:   'sos_global_fallback',
+    reason:  'no volunteers within geo range',
+    found:   allOnDuty.length,
+  })
 
   return {
-    volunteers: globalVolunteers,
-    source: ESCALATION_LEVEL.GLOBAL,
-    branch: null,
+    volunteers: allOnDuty,
+    source:     ESCALATION_LEVEL.GLOBAL,
+    branch:     null,
   }
 }
 
@@ -143,9 +145,9 @@ export const triggerSOS = async ({
       coordinates,
       address: address ?? '',
     },
-    photoUrl:     photoUrl ?? null,
+    photoUrl: photoUrl ?? null,
     voiceNoteUrl: voiceNoteUrl ?? null,
-    branchId:     branch?._id ?? null,
+    branchId: branch?._id ?? null,
     escalationLevel: source,
     escalationHistory: [
       {
@@ -174,7 +176,6 @@ export const triggerSOS = async ({
 // ─── ACCEPT SOS ──────────────────────────────────────────────────────────────
 
 export const acceptSOS = async ({ sosId, volunteerId }) => {
-  // Atomic check-and-set: prevents two volunteers accepting simultaneously
   const sos = await SOS.findOneAndUpdate(
     { _id: sosId, status: SOS_STATUS.ACTIVE },
     {
@@ -186,26 +187,36 @@ export const acceptSOS = async ({ sosId, volunteerId }) => {
   ).populate('triggeredBy', 'name phone location')
 
   if (!sos) {
-    // Could be not found OR already accepted — check which
     const exists = await SOS.exists({ _id: sosId })
     if (!exists) throw new NotFoundError('SOS')
     throw new ConflictError('SOS has already been accepted')
   }
 
-  // Cancel the escalation job — volunteer responded in time
   await cancelEscalation(sosId)
 
   const victim = sos.triggeredBy
+
+  // Always use SOS location (more accurate — refreshed at trigger time)
+  // Fall back to user's stored location
+  const sosCoords    = sos.location?.coordinates
+  const userCoords   = victim.location?.coordinates
+  const coords       = sosCoords || userCoords
 
   logger.info({ event: 'sos_accepted', sosId, volunteerId, victimId: victim._id })
 
   return {
     sos,
     victim: {
-      id:       victim._id,
-      name:     victim.name,
-      phone:    victim.phone,
-      location: victim.location,
+      id:    victim._id,
+      name:  victim.name,
+      phone: victim.phone,
+      // Return in multiple formats — frontend picks what works
+      victimLocation: {
+        type:        'Point',
+        coordinates: coords,              // [lng, lat] GeoJSON
+        latitude:    coords?.[1] ?? null, // flat format too
+        longitude:   coords?.[0] ?? null,
+      },
     },
   }
 }

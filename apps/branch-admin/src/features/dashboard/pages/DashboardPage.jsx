@@ -114,7 +114,7 @@ const DashboardPage = () => {
                   <div key={sos._id}
                     className="bg-white rounded-2xl border border-red-100 p-4
                                flex items-center gap-4">
-                    <div className="relative flex-shrink-0">
+                    <div className="relative shrink-0">
                       <motion.div
                         animate={{ scale: [1, 1.5, 1], opacity: [1, 0, 1] }}
                         transition={{ repeat: Infinity, duration: 1.5 }}

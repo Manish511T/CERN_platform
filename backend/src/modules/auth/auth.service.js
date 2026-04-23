@@ -72,7 +72,9 @@ export const login = async ({ email, password }) => {
 // ─── REFRESH TOKEN ────────────────────────────────────────────────────────────
 
 export const refreshAccessToken = async (incomingRefreshToken) => {
-  if (!incomingRefreshToken) throw new UnauthorizedError('No refresh token provided')
+  if (!incomingRefreshToken) {
+    throw new UnauthorizedError('No refresh token provided')
+  }
 
   const decoded = verifyRefreshToken(incomingRefreshToken)
 
@@ -81,13 +83,15 @@ export const refreshAccessToken = async (incomingRefreshToken) => {
     throw new UnauthorizedError('Invalid or expired refresh token')
   }
 
-  const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(user._id)
+  const { accessToken, refreshToken: newRefreshToken } =
+    generateTokenPair(user._id)
+
   user.refreshToken = newRefreshToken
   await user.save({ validateBeforeSave: false })
 
-  return { accessToken, refreshToken: newRefreshToken }
+  // Return role so controller can set correct cookie name
+  return { accessToken, refreshToken: newRefreshToken, role: user.role }
 }
-
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 
 export const logout = async (userId) => {
@@ -96,7 +100,6 @@ export const logout = async (userId) => {
 }
 
 // ─── GET ME ───────────────────────────────────────────────────────────────────
-
 export const getMe = async (userId) => {
   const user = await User.findById(userId)
     .populate('branchId', 'name code radiusMeters isActive')

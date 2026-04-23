@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
+import api from '../../../services/api'
 
 const GPS_OPTIONS = {
   enableHighAccuracy: true,
@@ -20,13 +21,19 @@ const useGPS = () => {
   const watchIdRef = useRef(null)
 
   // ✅ Success callback (async update → correct)
-  const onSuccess = useCallback((pos) => {
+  const onSuccess = useCallback(async (pos) => {
     const { latitude, longitude, accuracy: acc } = pos.coords
 
     setLocation({ latitude, longitude })
     setAccuracy(Math.round(acc))
-
     setGpsStatus(acc <= 50 ? 'ready' : 'low_accuracy')
+
+    // Update location in backend so SOS record has correct coordinates
+    try {
+      await api.post('/auth/location', { latitude, longitude })
+    } catch {
+      // Non-fatal — don't block GPS UI
+    }
   }, [])
 
   // ✅ Error callback
