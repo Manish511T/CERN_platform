@@ -2,14 +2,13 @@ import asyncHandler from '../../utils/asyncHandler.js'
 import { sendSuccess, sendCreated } from '../../utils/response.utils.js'
 import * as sosService from './sos.service.js'
 import * as notificationService from '../notification/notification.service.js'
-import { getIO } from '../../socket/index.js'
+import { getIO }      from '../../socket/index.js'
 import { getSocketId } from '../../socket/socket.manager.js'
 import { SOCKET_EVENTS } from '../../shared/constants.js'
 import logger from '../../config/logger.js'
 
 export const triggerSOS = asyncHandler(async (req, res) => {
   const { latitude, longitude, forSelf, emergencyType, address } = req.body
-
   const photoUrl     = req.files?.photo?.[0]?.path ?? null
   const voiceNoteUrl = req.files?.voice?.[0]?.path ?? null
 
@@ -19,75 +18,79 @@ export const triggerSOS = asyncHandler(async (req, res) => {
     address, photoUrl, voiceNoteUrl,
   })
 
-  // ── DEBUG: Print exactly what we found ─────────────────────────────────────
-  console.log('\n========== SOS DISPATCH DEBUG ==========')
-  console.log('SOS ID:', sos._id.toString())
-  console.log('Source:', source)
-  console.log('Volunteers found:', volunteers.length)
-  volunteers.forEach((v, i) => {
-    console.log(`  Volunteer[${i}]: id=${v._id} name=${v.name} isOnDuty=${v.isOnDuty}`)
-  })
-
   const io = getIO()
+
+  // ── Volunteer payload ─────────────────────────────────────────────────────
+  const volunteerPayload = {
+    sosId:         sos._id,
+    emergencyType: sos.emergencyType,
+    location:      sos.location,
+    photoUrl:      sos.photoUrl,
+    triggeredBy:   { name: req.user.name },
+    isVolunteer:   true,
+    type:          'rescue',   // volunteer knows this is a rescue request
+  }
+
+  // ── Nearby user payload ───────────────────────────────────────────────────
+  const userPayload = {
+    sosId:         sos._id,
+    emergencyType: sos.emergencyType,
+    location:      sos.location,
+    photoUrl:      sos.photoUrl,
+    triggeredBy:   { name: req.user.name },
+    isVolunteer:   false,
+    type:          'firstaid',  // user knows this is a first aid request
+    message:       'Someone nearby needs immediate first aid help!',
+  }
+
+  // ── Dispatch to volunteers ────────────────────────────────────────────────
   const offlineVolunteers = []
   let socketNotified = 0
 
-  for (const vol of volunteers) {
-    const volId    = vol._id.toString()
-    const socketId = await getSocketId(volId)
+  console.log('\n========== SOS DISPATCH ==========')
+  console.log(`SOS: ${sos._id} | Type: ${emergencyType} | Source: ${source}`)
+  console.log(`Volunteers: ${volunteers.length} | Nearby users: ${nearbyUsers.length}`)
 
-    console.log(`  Socket lookup: userId=${volId} → socketId=${socketId}`)
+  for (const vol of volunteers) {
+    const socketId = await getSocketId(vol._id.toString())
+    console.log(`  Vol ${vol.name} (${vol._id}) → socketId: ${socketId || 'OFFLINE'}`)
 
     if (socketId) {
-      const payload = {
-        sosId:         sos._id,
-        emergencyType: sos.emergencyType,
-        location:      sos.location,
-        photoUrl:      sos.photoUrl,
-        triggeredBy:   { name: req.user.name },
-        isVolunteer:   true,
-      }
-      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, payload)
+      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, volunteerPayload)
       socketNotified++
-      console.log(`  ✅ Socket emitted to ${vol.name} (${socketId})`)
     } else {
       offlineVolunteers.push(vol)
-      console.log(`  ❌ No socket for ${vol.name} — will try push`)
     }
   }
 
-  console.log(`Total: ${socketNotified} via socket, ${offlineVolunteers.length} offline`)
-  console.log('=========================================\n')
-
-  // nearby users
+  // ── Dispatch to nearby users (first aid) ──────────────────────────────────
+  let nearbyNotified = 0
   for (const user of nearbyUsers) {
     const socketId = await getSocketId(user._id.toString())
+    console.log(`  User ${user.name} (${user._id}) → socketId: ${socketId || 'OFFLINE'}`)
+
     if (socketId) {
-      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, {
-        sosId:         sos._id,
-        emergencyType: sos.emergencyType,
-        location:      sos.location,
-        photoUrl:      sos.photoUrl,
-        triggeredBy:   { name: req.user.name },
-        isVolunteer:   false,
-      })
+      io.to(socketId).emit(SOCKET_EVENTS.SOS_ALERT, userPayload)
+      nearbyNotified++
     }
   }
 
+  console.log(`Dispatched: ${socketNotified} vols (socket) + ${nearbyNotified} users (socket)`)
+  console.log('===================================\n')
+
+  // ── Push notifications for offline volunteers ─────────────────────────────
   if (offlineVolunteers.length) {
-    notificationService.notifyVolunteers(offlineVolunteers, {
-      sosId:         sos._id,
-      emergencyType: sos.emergencyType,
-      location:      sos.location,
-    }).catch(err => logger.error({ event: 'push_notify_failed', err: err.message }))
+    notificationService.notifyVolunteers(offlineVolunteers, volunteerPayload)
+      .catch(err => logger.error({ event: 'push_failed', err: err.message }))
   }
 
   sendCreated(res, {
     sosId:              sos._id,
     escalationSource:   source,
     notifiedVolunteers: volunteers.length,
+    notifiedNearbyUsers: nearbyUsers.length,
     socketNotified,
-    pushNotified:       offlineVolunteers.length,
+    nearbyNotified,
   })
 })
 
@@ -97,20 +100,36 @@ export const acceptSOS = asyncHandler(async (req, res) => {
     volunteerId: req.user._id,
   })
 
+  const io = getIO()
+
+  // ── Notify victim ─────────────────────────────────────────────────────────
   const victimSocketId = await getSocketId(victim.id.toString())
-
-  console.log('=== ACCEPT SOS DEBUG ===')
-  console.log('victim.victimLocation:', JSON.stringify(victim.victimLocation))
-  console.log('victimSocketId:', victimSocketId)
-
   if (victimSocketId) {
-    getIO().to(victimSocketId).emit(SOCKET_EVENTS.SOS_ACCEPTED, {
+    io.to(victimSocketId).emit(SOCKET_EVENTS.SOS_ACCEPTED, {
       sosId:          sos._id,
       volunteerId:    req.user._id,
       volunteerName:  req.user.name,
       openMap:        true,
-      victimLocation: victim.victimLocation,  // ← send the full object
+      victimLocation: victim.victimLocation,
     })
+  }
+
+  // ── Notify nearby users that help is coming (dismiss their alert) ─────────
+  // Find all users who were notified and tell them volunteer accepted
+  const { nearbyUsers } = await sosService.findDispatchTargets(
+    sos.location.coordinates,
+    victim.id
+  )
+
+  for (const user of nearbyUsers) {
+    const socketId = await getSocketId(user._id.toString())
+    if (socketId) {
+      io.to(socketId).emit(SOCKET_EVENTS.SOS_VOLUNTEER_ASSIGNED, {
+        sosId:         sos._id,
+        volunteerName: req.user.name,
+        message:       `A volunteer (${req.user.name}) has accepted this emergency.`,
+      })
+    }
   }
 
   if (!victimSocketId) {
@@ -122,7 +141,7 @@ export const acceptSOS = asyncHandler(async (req, res) => {
     victimId:       victim.id,
     victimName:     victim.name,
     victimPhone:    victim.phone,
-    victimLocation: victim.victimLocation,   // ← consistent with socket
+    victimLocation: victim.victimLocation,
   })
 })
 
@@ -148,10 +167,8 @@ export const getHistory = asyncHandler(async (req, res) => {
 
 export const getActive = asyncHandler(async (req, res) => {
   const { role, branchId } = req.user
-
   const records = await sosService.getActiveSOSList(
     role === 'branch_admin' ? branchId : null
   )
-
   sendSuccess(res, { records })
 })

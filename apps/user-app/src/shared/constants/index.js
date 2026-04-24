@@ -25,10 +25,11 @@ export const EMERGENCY_TYPE = Object.freeze({
 })
 
 export const SOCKET_EVENTS = Object.freeze({
-  SOS_ALERT:       'sos:alert',
-  SOS_ACCEPTED:    'sos:accepted',
-  SOS_ESCALATED:   'sos:escalated',
-  VOLUNTEER_OFFLINE: 'volunteer:offline',
-  LOCATION_UPDATE: 'location:update',
-  VOLUNTEER_LOCATION: 'volunteer:location',
+  SOS_ALERT:              'sos:alert',
+  SOS_ACCEPTED:           'sos:accepted',
+  SOS_ESCALATED:          'sos:escalated',
+  SOS_VOLUNTEER_ASSIGNED: 'sos:volunteer_assigned',  // ← new
+  VOLUNTEER_OFFLINE:      'volunteer:offline',
+  LOCATION_UPDATE:        'location:update',
+  VOLUNTEER_LOCATION:     'volunteer:location',
 })

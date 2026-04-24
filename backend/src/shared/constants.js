@@ -37,11 +37,12 @@ export const SOCKET_EVENTS = Object.freeze({
   VOLUNTEER_LOCATION: 'volunteer:location',
 
   // Server → Client
-  SOS_ALERT: 'sos:alert',
-  SOS_ACCEPTED: 'sos:accepted',
-  SOS_ESCALATED: 'sos:escalated',
-  VOLUNTEER_OFFLINE: 'volunteer:offline',
-  LOCATION_UPDATE: 'location:update',
+  SOS_ALERT:               'sos:alert',
+  SOS_ACCEPTED:            'sos:accepted',
+  SOS_ESCALATED:           'sos:escalated',
+  SOS_VOLUNTEER_ASSIGNED:  'sos:volunteer_assigned',  // ← new
+  VOLUNTEER_OFFLINE:       'volunteer:offline',
+  LOCATION_UPDATE:         'location:update',
 })
 
 

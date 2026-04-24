@@ -7,7 +7,8 @@
     "dev": "nodemon index.js",
     "start": "node index.js",
     "seed:superadmin":  "node src/scripts/createSuperAdmin.js",
-    "seed:branchadmin":     "node src/scripts/createBranchAdmin.js"
+    "seed:branchadmin":     "node src/scripts/createBranchAdmin.js",
+    "seed:noida": "node src/scripts/seedNoida.js"
   },
   "keywords": [],
   "author": "Manish Thakur",

@@ -18,49 +18,69 @@ const AlertListener = () => {
     if (!isAuth) return
 
     const handleSOSAlert = (data) => {
-      // Only process if it is a volunteer alert
-      if (!data.isVolunteer) return
+      console.log('=== VOLUNTEER SOS ALERT ===', data)
+
+      // Only process rescue alerts for volunteers
+      // (type: 'rescue' or isVolunteer: true)
+      if (!data.isVolunteer && data.type !== 'rescue') return
 
       dispatch(setIncomingAlert(data))
 
       const info = EMERGENCY_LABELS[data.emergencyType] || EMERGENCY_LABELS.other
 
-      // Toast with action button
       toast(
         (t) => (
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{info.emoji}</span>
-            <div className="flex-1">
-              <p className="font-semibold text-sm">{info.label} Emergency!</p>
-              <p className="text-xs text-slate-400">Tap to respond</p>
+          <div
+            onClick={() => { toast.dismiss(t.id); navigate('/alert') }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: 32 }}>{info.emoji}</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                🚨 {info.label} Emergency!
+              </p>
+              <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                Tap to respond
+              </p>
             </div>
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation()
                 toast.dismiss(t.id)
                 navigate('/alert')
               }}
-              className="px-3 py-1.5 bg-red-500 text-white text-xs
-                         font-semibold rounded-lg"
+              style={{
+                padding: '6px 14px',
+                background: '#dc2626', color: 'white',
+                border: 'none', borderRadius: 8,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              }}
             >
-              View
+              Respond
             </button>
           </div>
         ),
         {
-          duration: 15000,
-          style: { background: '#1e293b', color: '#f8fafc', maxWidth: '360px' },
+          duration:   20000,
+          style: {
+            background:   '#fff',
+            border:       '2px solid #fca5a5',
+            borderRadius: '16px',
+            padding:      '12px 16px',
+            maxWidth:     '380px',
+          },
         }
       )
     }
 
     socket.on(SOCKET_EVENTS.SOS_ALERT, handleSOSAlert)
-
-    return () => {
-      socket.off(SOCKET_EVENTS.SOS_ALERT, handleSOSAlert)
-    }
+    return () => socket.off(SOCKET_EVENTS.SOS_ALERT, handleSOSAlert)
   }, [isAuth, isOnDuty, dispatch, navigate])
 
-  return null  // no UI — listener only
+  return null
 }
 
 export default AlertListener

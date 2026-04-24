@@ -1,173 +1,206 @@
 import SOS from './sos.model.js'
 import User from '../auth/auth.model.js'
 import {
-  SOS_STATUS,
-  ESCALATION_LEVEL,
-  ROLES,
-  GEO,
+  SOS_STATUS, ESCALATION_LEVEL, ROLES, GEO,
 } from '../../shared/constants.js'
 import {
-  NotFoundError,
-  ConflictError,
-  ForbiddenError,
+  NotFoundError, ConflictError, ForbiddenError,
 } from '../../shared/errors.js'
 import { toGeoJSONPoint } from '../../utils/geo.utils.js'
-import { scheduleEscalation, cancelEscalation } from '../../queues/escalation.queue.js'
+import {
+  scheduleEscalation, cancelEscalation,
+} from '../../queues/escalation.queue.js'
 import logger from '../../config/logger.js'
 
-// ─── ROUTING ENGINE ───────────────────────────────────────────────────────────
-// Cascade: branch volunteers → nearby volunteers → global volunteers
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
-const findVolunteersForLocation = async (coordinates) => {
+const NEARBY_USER_RADIUS_M     = 500    // users for first aid
+const VOLUNTEER_MAX_RADIUS_M   = 5000   // hard cap on volunteer search
+const BRANCH_SEARCH_RADIUS_M   = 50000  // how far to look for a branch
+
+// ─── HELPER: valid location check ────────────────────────────────────────────
+
+const hasValidLocation = (user) => {
+  const coords = user.location?.coordinates
+  return (
+    coords &&
+    coords.length === 2 &&
+    !(coords[0] === 0 && coords[1] === 0)
+  )
+}
+
+// ─── ROUTING ENGINE ───────────────────────────────────────────────────────────
+
+export const findDispatchTargets = async (coordinates, userId) => {
   const { default: Branch } = await import('../branch/branch.model.js')
 
-  // Step 1: Try branch
+  let assignedBranch  = null
+  let branchVolunteers = []
+  let source          = ESCALATION_LEVEL.GLOBAL
+
+  // ── Step 1: Find which branch owns this location ──────────────────────────
   const branch = await Branch.findOne({
     coverageArea: {
       $near: {
         $geometry: { type: 'Point', coordinates },
-        $maxDistance: GEO.BRANCH_SEARCH_RADIUS_M,
+        $maxDistance: BRANCH_SEARCH_RADIUS_M,
       },
     },
     isActive: true,
   })
 
   if (branch) {
-    const branchVolunteers = await User.find({
-      role:            ROLES.VOLUNTEER,
-      branchId:        branch._id,
-      branchVerified:  true,
-      isOnDuty:        true,
-      // Only include volunteers with valid location (not [0,0])
-      'location.coordinates.0': { $ne: 0 },
-      'location.coordinates.1': { $ne: 0 },
+    assignedBranch = branch
+
+    // ── Step 2: Branch volunteers within 5km (hard cap) ────────────────────
+    // Use min(branch.radiusMeters, 5km) — never exceed 5km
+    const searchRadius = Math.min(branch.radiusMeters, VOLUNTEER_MAX_RADIUS_M)
+
+    branchVolunteers = await User.find({
+      role:           ROLES.VOLUNTEER,
+      branchId:       branch._id,
+      branchVerified: true,
+      isOnDuty:       true,
+      // Exclude volunteers with invalid/unset location
+      'location.coordinates': { $exists: true },
       location: {
         $near: {
           $geometry: { type: 'Point', coordinates },
-          $maxDistance: branch.radiusMeters,
+          $maxDistance: searchRadius,
         },
       },
     }).limit(10)
 
+    logger.info({
+      event:          'branch_volunteer_search',
+      branchId:       branch._id,
+      branchName:     branch.name,
+      searchRadiusM:  searchRadius,
+      found:          branchVolunteers.length,
+    })
+
     if (branchVolunteers.length > 0) {
-      return { volunteers: branchVolunteers, source: ESCALATION_LEVEL.BRANCH, branch }
+      source = ESCALATION_LEVEL.BRANCH
     }
   }
 
-  // Step 2: Nearby volunteers within 5km
-  const nearbyVolunteers = await User.find({
-    role:     ROLES.VOLUNTEER,
-    isOnDuty: true,
-    'location.coordinates.0': { $ne: 0 },
-    'location.coordinates.1': { $ne: 0 },
+  // ── Step 3: If no branch volunteers found, try nearby verified volunteers ─
+  // Still within 5km, but not restricted to a branch
+  let nearbyVolunteers = []
+  if (branchVolunteers.length === 0) {
+    nearbyVolunteers = await User.find({
+      role:           ROLES.VOLUNTEER,
+      branchVerified: true,
+      isOnDuty:       true,
+      'location.coordinates': { $exists: true },
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates },
+          $maxDistance: VOLUNTEER_MAX_RADIUS_M,
+        },
+      },
+    }).limit(10)
+
+    if (nearbyVolunteers.length > 0) {
+      source = ESCALATION_LEVEL.NEARBY
+      logger.info({
+        event:  'nearby_volunteer_fallback',
+        found:  nearbyVolunteers.length,
+      })
+    }
+  }
+
+  // ── Step 4: Nearby users for first aid (500m) ─────────────────────────────
+  // Exclude the victim themselves
+  // Exclude volunteers (they get a different alert)
+  const nearbyUsers = await User.find({
+    role:     ROLES.USER,
+    isActive: true,
+    _id:      { $ne: userId },
+    'location.coordinates': { $exists: true },
     location: {
       $near: {
         $geometry: { type: 'Point', coordinates },
-        $maxDistance: GEO.VOLUNTEER_SEARCH_RADIUS_M,
+        $maxDistance: NEARBY_USER_RADIUS_M,
       },
     },
-  }).limit(10)
-
-  if (nearbyVolunteers.length > 0) {
-    return { volunteers: nearbyVolunteers, source: ESCALATION_LEVEL.NEARBY, branch: null }
-  }
-
-  // Step 3: ALL on-duty volunteers regardless of location
-  // This catches volunteers who haven't updated location yet
-  const allOnDuty = await User.find({
-    role:     ROLES.VOLUNTEER,
-    isOnDuty: true,
-  }).limit(10)
+  }).limit(30)
 
   logger.info({
-    event:   'sos_global_fallback',
-    reason:  'no volunteers within geo range',
-    found:   allOnDuty.length,
+    event:           'sos_dispatch_targets',
+    coordinates,
+    branchFound:     !!assignedBranch,
+    branchName:      assignedBranch?.name,
+    branchVols:      branchVolunteers.length,
+    nearbyVols:      nearbyVolunteers.length,
+    nearbyUsers:     nearbyUsers.length,
+    source,
   })
 
   return {
-    volunteers: allOnDuty,
-    source:     ESCALATION_LEVEL.GLOBAL,
-    branch:     null,
+    branch:          assignedBranch,
+    volunteers:      branchVolunteers.length > 0 ? branchVolunteers : nearbyVolunteers,
+    nearbyUsers,
+    source,
   }
 }
 
 // ─── TRIGGER SOS ─────────────────────────────────────────────────────────────
 
 export const triggerSOS = async ({
-  userId,
-  latitude,
-  longitude,
-  forSelf,
-  emergencyType,
-  address,
-  photoUrl,
-  voiceNoteUrl,
+  userId, latitude, longitude,
+  forSelf, emergencyType, address,
+  photoUrl, voiceNoteUrl,
 }) => {
-  const coordinates = [longitude, latitude] // GeoJSON: [lng, lat]
+  const coordinates = [longitude, latitude]  // GeoJSON [lng, lat]
 
-  // Auto-cancel any previous active SOS from this user
+  // Auto-cancel previous active SOS from this user
   const cancelled = await SOS.updateMany(
     { triggeredBy: userId, status: SOS_STATUS.ACTIVE },
     { status: SOS_STATUS.CANCELLED }
   )
 
   if (cancelled.modifiedCount > 0) {
-    logger.info({
-      event: 'sos_auto_cancelled',
-      userId,
-      count: cancelled.modifiedCount,
-    })
+    logger.info({ event: 'sos_auto_cancelled', userId, count: cancelled.modifiedCount })
   }
 
-  // Find volunteers using cascade logic
-  const { volunteers, source, branch } = await findVolunteersForLocation(coordinates)
-
-  // Find nearby non-volunteer users to alert as bystanders
-  const nearbyUsers = await User.find({
-    role: ROLES.USER,
-    _id: { $ne: userId },
-    location: {
-      $near: {
-        $geometry: { type: 'Point', coordinates },
-        $maxDistance: GEO.USER_ALERT_RADIUS_M,
-      },
-    },
-  }).limit(20)
+  // Find dispatch targets
+  const { branch, volunteers, nearbyUsers, source } =
+    await findDispatchTargets(coordinates, userId)
 
   // Create SOS record
   const sos = await SOS.create({
-    triggeredBy: userId,
+    triggeredBy:  userId,
     forSelf,
     emergencyType,
     location: {
-      type: 'Point',
+      type:        'Point',
       coordinates,
-      address: address ?? '',
+      address:     address ?? '',
     },
-    photoUrl: photoUrl ?? null,
+    photoUrl:     photoUrl  ?? null,
     voiceNoteUrl: voiceNoteUrl ?? null,
-    branchId: branch?._id ?? null,
-    escalationLevel: source,
-    escalationHistory: [
-      {
-        level: source,
-        volunteersNotified: volunteers.length,
-        reason: 'initial_dispatch',
-      },
-    ],
+    branchId:     branch?._id ?? null,
+    escalationLevel:   source,
+    escalationHistory: [{
+      level:              source,
+      volunteersNotified: volunteers.length,
+      reason:             'initial_dispatch',
+    }],
   })
 
-  // Schedule escalation — fires in 60s if no volunteer accepts
+  // Schedule escalation (fires if no volunteer accepts in 60s)
   await scheduleEscalation(sos._id.toString(), 60)
 
   logger.info({
-    event: 'sos_triggered',
-    sosId: sos._id,
+    event:              'sos_triggered',
+    sosId:              sos._id,
     userId,
+    emergencyType,
+    branch:             branch?.name ?? 'none',
     source,
     volunteersNotified: volunteers.length,
-    nearbyUsers: nearbyUsers.length,
+    nearbyUsers:        nearbyUsers.length,
   })
 
   return { sos, volunteers, nearbyUsers, source }
@@ -176,6 +209,7 @@ export const triggerSOS = async ({
 // ─── ACCEPT SOS ──────────────────────────────────────────────────────────────
 
 export const acceptSOS = async ({ sosId, volunteerId }) => {
+  // Atomic — prevents race condition (two volunteers accepting simultaneously)
   const sos = await SOS.findOneAndUpdate(
     { _id: sosId, status: SOS_STATUS.ACTIVE },
     {
@@ -189,18 +223,17 @@ export const acceptSOS = async ({ sosId, volunteerId }) => {
   if (!sos) {
     const exists = await SOS.exists({ _id: sosId })
     if (!exists) throw new NotFoundError('SOS')
-    throw new ConflictError('SOS has already been accepted')
+    throw new ConflictError('SOS has already been accepted by another volunteer')
   }
 
   await cancelEscalation(sosId)
 
-  const victim = sos.triggeredBy
-
-  // Always use SOS location (more accurate — refreshed at trigger time)
-  // Fall back to user's stored location
-  const sosCoords    = sos.location?.coordinates
-  const userCoords   = victim.location?.coordinates
-  const coords       = sosCoords || userCoords
+  const victim  = sos.triggeredBy
+  const sosCoords  = sos.location?.coordinates
+  const userCoords = victim.location?.coordinates
+  const coords     = (sosCoords && !(sosCoords[0] === 0 && sosCoords[1] === 0))
+    ? sosCoords
+    : userCoords
 
   logger.info({ event: 'sos_accepted', sosId, volunteerId, victimId: victim._id })
 
@@ -210,11 +243,10 @@ export const acceptSOS = async ({ sosId, volunteerId }) => {
       id:    victim._id,
       name:  victim.name,
       phone: victim.phone,
-      // Return in multiple formats — frontend picks what works
       victimLocation: {
         type:        'Point',
-        coordinates: coords,              // [lng, lat] GeoJSON
-        latitude:    coords?.[1] ?? null, // flat format too
+        coordinates: coords,
+        latitude:    coords?.[1] ?? null,
         longitude:   coords?.[0] ?? null,
       },
     },
@@ -222,48 +254,44 @@ export const acceptSOS = async ({ sosId, volunteerId }) => {
 }
 
 // ─── ESCALATE SOS ────────────────────────────────────────────────────────────
-// Called by BullMQ worker when timeout fires
 
 export const escalateSOS = async (sosId) => {
   const sos = await SOS.findById(sosId)
-
-  // Already handled — stale job
   if (!sos || sos.status !== SOS_STATUS.ACTIVE) return null
 
-  const levelOrder = Object.values(ESCALATION_LEVEL)
+  const levelOrder   = Object.values(ESCALATION_LEVEL)
   const currentIndex = levelOrder.indexOf(sos.escalationLevel)
 
-  // Already at max level
   if (currentIndex === levelOrder.length - 1) {
     await SOS.findByIdAndUpdate(sosId, { status: SOS_STATUS.ESCALATED })
     logger.warn({ event: 'sos_max_escalation', sosId })
     return { escalated: true, nextLevel: null, volunteers: [] }
   }
 
-  const nextLevel = levelOrder[currentIndex + 1]
-  const { volunteers } = await findVolunteersForLocation(sos.location.coordinates)
+  const nextLevel   = levelOrder[currentIndex + 1]
+  const coordinates = sos.location.coordinates
+  const { volunteers } = await findDispatchTargets(coordinates, sos.triggeredBy)
 
   await SOS.findByIdAndUpdate(sosId, {
     escalationLevel: nextLevel,
     $push: {
       escalationHistory: {
-        level: nextLevel,
+        level:              nextLevel,
         volunteersNotified: volunteers.length,
-        reason: 'timeout',
-        timestamp: new Date(),
+        reason:             'timeout',
+        timestamp:          new Date(),
       },
     },
   })
 
-  // Reschedule for next level
   await scheduleEscalation(sosId, 90)
 
   logger.info({
-    event: 'sos_escalated',
+    event:    'sos_escalated',
     sosId,
-    from: sos.escalationLevel,
-    to: nextLevel,
-    volunteersNotified: volunteers.length,
+    from:     sos.escalationLevel,
+    to:       nextLevel,
+    found:    volunteers.length,
   })
 
   return { escalated: true, nextLevel, volunteers }
@@ -288,42 +316,33 @@ export const updateStatus = async ({ sosId, userId, status }) => {
 // ─── GET HISTORY ─────────────────────────────────────────────────────────────
 
 export const getHistory = async ({ userId, role, page, limit }) => {
-  const query =
-    role === ROLES.VOLUNTEER
-      ? { acceptedBy: userId }
-      : { triggeredBy: userId }
+  const query = role === ROLES.VOLUNTEER
+    ? { acceptedBy: userId }
+    : { triggeredBy: userId }
 
   const [records, total] = await Promise.all([
     SOS.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .populate('acceptedBy', 'name phone')
+      .populate('acceptedBy',  'name phone')
       .populate('triggeredBy', 'name phone')
       .lean(),
     SOS.countDocuments(query),
   ])
 
-  return {
-    records,
-    total,
-    page,
-    pages: Math.ceil(total / limit),
-  }
+  return { records, total, page, pages: Math.ceil(total / limit) }
 }
 
-// ─── GET ACTIVE (Admin use) ───────────────────────────────────────────────────
+// ─── GET ACTIVE LIST ─────────────────────────────────────────────────────────
 
 export const getActiveSOSList = async (branchId = null) => {
   const query = { status: SOS_STATUS.ACTIVE }
-
-  if (branchId) {
-    query.branchId = branchId
-  }
+  if (branchId) query.branchId = branchId
 
   return SOS.find(query)
     .sort({ createdAt: -1 })
     .populate('triggeredBy', 'name phone')
-    .populate('branchId', 'name code')
+    .populate('branchId',    'name code')
     .lean()
 }
