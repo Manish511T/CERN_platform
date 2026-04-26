@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate }  from 'react-router-dom'
 import { motion }       from 'framer-motion'
@@ -10,6 +10,7 @@ import { clearSOS } from '../../../store/slices/sosSlice'
 import { updateSOSStatusApi } from '../../sos/services/sosApi'
 import { getDistanceMeters, getETAMinutes, formatDistance } from '../utils/geo'
 import toast from 'react-hot-toast'
+import TrackingSkeleton from '../components/TrackingSkeleton'
 
 // ── Fix Leaflet default marker icon ────────────────────────────────────────────
 // Vite mangles the default icon URLs — must override manually
@@ -71,6 +72,12 @@ const TrackingPage = () => {
   const dispatch       = useDispatch()
   const navigate       = useNavigate()
   const activeTracking = useSelector(selectActiveTracking)
+  const [mapLoading, setMapLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setMapLoading(false), 1000)
+    return () => clearTimeout(t)
+  }, [])
 
   // No active tracking
   if (!activeTracking) {
@@ -94,6 +101,8 @@ const TrackingPage = () => {
       </div>
     )
   }
+
+  if (mapLoading) return <TrackingSkeleton />
 
   const volunteerPos = (activeTracking.volunteerLat != null && activeTracking.volunteerLng != null)
     ? [activeTracking.volunteerLat, activeTracking.volunteerLng]

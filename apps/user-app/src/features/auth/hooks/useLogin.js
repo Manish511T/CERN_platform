@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { loginApi } from '../services/authApi'
@@ -10,8 +10,17 @@ const useLogin = () => {
 
   const { login } = useAuth()
   const navigate = useNavigate()
+  const isMounted = useRef(true)
 
   const handleLogin = async ({ email, password }) => {
+    // ✅ Basic validation (fast fail)
+    if (!email || !password) {
+      const msg = 'Email and password are required'
+      setError(msg)
+      toast.error(msg)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -19,33 +28,35 @@ const useLogin = () => {
       const response = await loginApi({ email, password })
       const { user, accessToken } = response.data.data
 
-      // ✅ RBAC: restrict non-user roles
+      // ✅ RBAC check
       if (user.role !== 'user') {
-        toast.error('Please use the correct app for your role.')
-        return
+        throw new Error('Please use the correct app for your role.')
       }
 
-      // ✅ Save auth state
+      // ✅ Save auth
       login(user, accessToken)
 
-      // ✅ Safe name handling
       const firstName = user?.name?.split(' ')[0] || 'User'
 
       toast.success(`Welcome back, ${firstName}!`)
 
-      // ✅ Redirect
       navigate('/dashboard', { replace: true })
 
     } catch (err) {
       const message =
         err.response?.data?.message ||
-        err.response?.data?.error ||
+        err.message ||
         'Login failed. Please try again.'
 
-      setError(message)
-      toast.error(message)
+      if (isMounted.current) {
+        setError(message)
+        toast.error(message)
+      }
+
     } finally {
-      setLoading(false)
+      if (isMounted.current) {
+        setLoading(false)
+      }
     }
   }
 

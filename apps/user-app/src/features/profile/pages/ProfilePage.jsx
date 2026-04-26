@@ -5,6 +5,8 @@ import { Card, Badge } from '../../../shared/components/ui'
 import PageWrapper from '../../../shared/components/layout/PageWrapper'
 import useAuth from '../../../shared/hooks/useAuth'
 import { Button } from '../../../shared/components/ui'
+import ProfileSkeleton from '../components/ProfileSkeleton' 
+import { useEffect, useState } from 'react'
 
 const roleColors = {
   user:         'blue',
@@ -16,9 +18,18 @@ const roleColors = {
 const ProfilePage = () => {
   const user   = useSelector(selectUser)
   const { logout } = useAuth()
+   const [loading,  setLoading] = useState(true)
+
+   useEffect(() => {
+    if (user) {
+      const t = setTimeout(() => setLoading(false), 500)
+      return () => clearTimeout(t)
+    }
+  }, [user])
 
   return (
-    <PageWrapper title="Profile">
+    <PageWrapper title="Profile" loading={loading}
+      skeleton={<ProfileSkeleton />} >
       <div className="space-y-4">
         {/* Avatar + Name */}
         <Card padding="lg" className="text-center">

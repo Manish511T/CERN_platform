@@ -13,6 +13,7 @@ import { SOCKET_EVENTS } from "./shared/constants";
 import ProtectedRoute from "./router/ProtectedRoute";
 import PublicRoute from "./router/PublicRoute";
 import toast from "react-hot-toast";
+import AuthPageSkeleton from "./features/auth/components/AuthPageSkeleton";
 
 const LoginPage = lazy(() => import("./features/auth/pages/LoginPage"));
 const RegisterPage = lazy(() => import("./features/auth/pages/RegisterPage"));
@@ -25,14 +26,7 @@ const TrackingPage = lazy(
 );
 const ProfilePage = lazy(() => import("./features/profile/pages/ProfilePage"));
 
-const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-slate-50">
-    <div
-      className="w-8 h-8 border-4 border-blue-500 border-t-transparent
-                    rounded-full animate-spin"
-    />
-  </div>
-);
+const PageLoader = () => <AuthPageSkeleton />;
 
 // Extract lat/lng from GeoJSON or flat format
 const extractCoords = (location) => {
@@ -183,7 +177,7 @@ useEffect(() => {
 }, [dispatch])
 
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<AuthPageSkeleton/>}>
       <Routes>
         <Route element={<PublicRoute redirectTo="/dashboard" />}>
           <Route path="/login" element={<LoginPage />} />
